@@ -1,0 +1,133 @@
+{
+  "expo": {
+    "name": "Lobbi Venue",
+    "slug": "venue-lobbi",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/logo.png",
+    "userInterfaceStyle": "light",
+    "scheme": "venue-lobbi",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lobbi.venue",
+      "icon": "./assets/logo.png",
+      "config": {
+        "googleMapsApiKey": "AIzaSyB7nVBHGzAEfk5IWzQnjpLWMpYPSyK3Yiw"
+      },
+      "infoPlist": {
+        "NSCameraUsageDescription": "Lobbi Venue needs camera access to scan QR codes and take photos",
+        "NSMicrophoneUsageDescription": "Lobbi Venue needs microphone access to record voice messages",
+        "NSLocationWhenInUseUsageDescription": "Lobbi Venue uses your location to manage your venue",
+        "NSContactsUsageDescription": "Lobbi Venue can find your contacts on the platform",
+        "NSPhotoLibraryUsageDescription": "Lobbi Venue needs photo library access to share images and videos"
+      }
+    },
+    "android": {
+      "softwareKeyboardLayoutMode": "resize",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyB7nVBHGzAEfk5IWzQnjpLWMpYPSyK3Yiw"
+        }
+      },
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logo.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.lobbi.venue",
+      "icon": "./assets/logo.png",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "READ_CONTACTS",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO",
+        "POST_NOTIFICATIONS",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "VIBRATE"
+      ],
+      "blockedPermissions": [
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/logo.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-dev-client",
+      [
+        "expo-updates",
+        {
+          "username": "manoj_kumar_t"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Lobbi Venue needs camera to scan QR codes and take photos"
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/logo.png",
+          "color": "#059669"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Lobbi Venue uses your location to manage your venue",
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Lobbi Venue can find your contacts on the platform"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Lobbi Venue needs photo access to share images",
+          "cameraPermission": "Lobbi Venue needs camera to take photos"
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Lobbi Venue needs microphone for voice messages"
+        }
+      ],
+      "expo-video"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "9940d0d4-fc39-48a9-b8ec-a9a3e5f8a9a8"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/9940d0d4-fc39-48a9-b8ec-a9a3e5f8a9a8"
+    },
+    "owner": "manoj_kumar_t"
+  }
+}
