@@ -1,6 +1,8 @@
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Eye, EyeOff } from "lucide-react-native";
+import { PRIMARY_COLOR } from "../../constants/theme";
 
+// Web parity: pill input + lucide Eye/EyeOff toggle (brand color) at right
 export default function PasswordField({
   label,
   value,
@@ -10,6 +12,8 @@ export default function PasswordField({
   showPassword,
   onToggle,
   helperText,
+  errorText,
+  autoFocus = false,
 }) {
   return (
     <View style={styles.wrapper}>
@@ -21,26 +25,35 @@ export default function PasswordField({
           placeholder={placeholder}
           secureTextEntry={!showPassword}
           editable={editable}
+          autoCapitalize="none"
+          autoFocus={autoFocus}
           style={[styles.input, !editable && styles.inputDisabled]}
           placeholderTextColor="#9CA3AF"
         />
-        <TouchableOpacity onPress={onToggle} style={styles.eye} disabled={!editable}>
-          <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#6B7280" />
+        <TouchableOpacity onPress={onToggle} style={styles.eye} disabled={!editable} activeOpacity={0.7}>
+          {showPassword ? (
+            <EyeOff size={18} color={PRIMARY_COLOR} />
+          ) : (
+            <Eye size={18} color={PRIMARY_COLOR} />
+          )}
         </TouchableOpacity>
       </View>
-      {helperText ? <Text style={styles.helper}>{helperText}</Text> : null}
+      {errorText ? <Text style={styles.error}>{errorText}</Text> : null}
+      {!errorText && helperText ? <Text style={styles.helper}>{helperText}</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrapper: {
-    marginBottom: 16,
+    marginBottom: 18,
   },
   label: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#374151",
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: 2,
     marginBottom: 6,
   },
   inputWrap: {
@@ -48,27 +61,36 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   input: {
+    height: 48,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: "rgba(229, 231, 235, 0.7)",
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: 24,
+    paddingLeft: 18,
+    paddingRight: 46,
     fontSize: 14,
+    fontWeight: "700",
     color: "#111827",
-    paddingRight: 44,
   },
   inputDisabled: {
     opacity: 0.6,
   },
   eye: {
     position: "absolute",
-    right: 12,
+    right: 14,
     padding: 4,
   },
   helper: {
     marginTop: 6,
-    fontSize: 11,
-    color: "#6B7280",
+    fontSize: 10,
+    color: "#9CA3AF",
+  },
+  error: {
+    marginTop: 6,
+    fontSize: 10,
+    color: "#EF4444",
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
 });
