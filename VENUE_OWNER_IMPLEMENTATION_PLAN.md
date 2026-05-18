@@ -31,29 +31,43 @@
 
 ### Tasks
 
-- [ ] **1.1** `src/app/(auth)/login.js` — Email/phone + password form
-  - Uses `AuthInput`, `PasswordField`, `AuthButton` from components/auth/
-  - Validates: phone (10 digits) or email format, password >= 6 chars
-  - On submit: `authService.login(identifier, password)` → store token via AsyncStorage `STORAGE_KEYS.token`
-  - On success: check `user.role === 'venue_owner'` → redirect `/(tabs)/dashboard`; else show error
-  - "Forgot password?" link → `/(auth)/forgot-password`
-  - No "Register" link (owners onboarded by admin/landing form, not self-signup)
+- [x] **1.1** `src/app/(auth)/login.js` — Email/phone + password form ✅
+  - Mobile pattern matched (AuthScreen + AuthInput + PasswordField + AuthButton)
+  - Role check enforces `venue_owner` (player → error + logout)
+  - Account status checks: pending / rejected / suspended → error + logout
+  - 429 rate limit error handled
+  - Redirects to `/(tabs)/dashboard` on success
+  - "Forgot Password?" link → `/(auth)/forgot-password`
+  - No Register link (owners onboarded externally)
 
-- [ ] **1.2** `src/app/(auth)/forgot-password.js` + `otp-verification.js` + `reset-password.js`
-  - Match mobile/ flow exactly (already proven)
+- [x] **1.2** `src/app/(auth)/forgot-password.js` + `reset-password.js` ✅
+  - 100% mobile parity — 2-stage OTP + new password screen
+  - Phone normalize (`cleanPhone` strips +91, max 10 digits)
+  - 6-digit OTP via `OtpInput`, 60s resend countdown
+  - Password regex `(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}`
+  - `otp-verification.js` NOT created — owner-only app, no self-registration flow needs it
+  - `(auth)/_layout.js` registers: login, forgot-password, reset-password (3 screens)
 
-- [ ] **1.3** `src/app/_layout.js` — Wrap with `AuthProvider`, `LocationProvider`, error boundary
-  - Auth redirect logic: if no token → `/(auth)/login`; if owner → `/(tabs)/dashboard`
+- [x] **1.3** `src/app/_layout.js` — Wrap with providers + auth-aware index ✅
+  - Providers: GestureHandlerRootView → KeyboardProvider → SafeAreaProvider → AuthProvider → TabRefreshProvider → LocationProvider
+  - Font loading (Manrope + Chivo families) + SplashScreen.preventAutoHideAsync
+  - ToastManager mounted at root
+  - `src/app/index.js` — splash GIF 2s + auth gate (no user → login, wrong role → logout+login, owner → `/(tabs)/dashboard`)
+  - `src/app/(tabs)/_layout.js` — only `dashboard` screen registered (other tabs in 1.4)
+  - `src/app/(tabs)/dashboard.js` — placeholder showing user name/role/business + Logout button
 
-- [ ] **1.4** `src/app/(tabs)/_layout.js` — Bottom tab bar (5 tabs)
-  - Tabs: **Dashboard** | **Venues** | **Bookings** | **Finance** | **Profile**
-  - Use lucide icons (Home, MapPin, Calendar, Wallet, User)
-  - Active tint: `PRIMARY_COLOR`
+- [x] **1.4** `src/app/(tabs)/_layout.js` — Bottom tab bar (5 tabs) ✅
+  - expo-router `<Tabs>` (mobile's SwipeableTabView replaced with standard tabs for owner)
+  - 5 tabs: Dashboard / Venues / Bookings / Finance / Profile with lucide icons
+  - Active tint `PRIMARY_COLOR`, inactive `#9CA3AF`, 64px height
+  - Placeholder screens for venues/bookings/finance (filled in later phases)
 
-- [ ] **1.5** `src/app/(tabs)/profile.js` — Profile + Logout
-  - Show name, email, phone, business name
-  - Settings link (notifications, privacy)
-  - Logout → clear AsyncStorage + redirect to `/(auth)/login`
+- [x] **1.5** `src/app/(tabs)/profile.js` — Profile + Logout ✅
+  - Avatar with initials, name, "Venue Owner" badge
+  - Account section: Email, Phone (+91 prefix), Business, GST (if present)
+  - Settings section: Notifications, Privacy & Security (link placeholders)
+  - Logout with native confirmation Alert → clear session via `useAuth().logout()` → `safeReplace` to login
+  - Version footer
 
 ---
 

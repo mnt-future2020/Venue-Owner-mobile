@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Lobbi Venue",
-    "slug": "venue-lobbi",
+    "slug": "lobbi-venue",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/logo.png",
@@ -119,14 +119,14 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "9940d0d4-fc39-48a9-b8ec-a9a3e5f8a9a8"
+        "projectId": "57ae9062-fc8f-426f-b015-a0826c51db72"
       }
     },
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/9940d0d4-fc39-48a9-b8ec-a9a3e5f8a9a8"
+      "url": "https://u.expo.dev/57ae9062-fc8f-426f-b015-a0826c51db72"
     },
     "owner": "manoj_kumar_t"
   }

@@ -4,20 +4,18 @@ import { PRIMARY_COLOR } from "../../constants/theme";
 
 const CODE_LENGTH = 6;
 
+// Web parity: 6 cells, w-12 h-16, border-2, rounded-2xl, text-xl font-black
 export default function OtpInput({ value, onChange, editable = true }) {
   const refs = useRef([]);
 
   const handleChange = (text, idx) => {
     const digits = text.replace(/\D/g, "");
     if (!digits) {
-      // Cleared this cell
       const next = [...value];
       next[idx] = "";
       onChange(next);
       return;
     }
-
-    // Paste: multiple digits came in — fill from current cell forward
     if (digits.length > 1) {
       const next = [...value];
       for (let i = 0; i < digits.length && idx + i < CODE_LENGTH; i++) {
@@ -28,8 +26,6 @@ export default function OtpInput({ value, onChange, editable = true }) {
       refs.current[focusIdx]?.focus();
       return;
     }
-
-    // Single digit typed
     const next = [...value];
     next[idx] = digits[0];
     onChange(next);
@@ -39,13 +35,11 @@ export default function OtpInput({ value, onChange, editable = true }) {
   const handleKeyPress = (e, idx) => {
     if (e.nativeEvent.key === "Backspace") {
       if (!value[idx] && idx > 0) {
-        // Current cell empty — go back and clear previous
         const next = [...value];
         next[idx - 1] = "";
         onChange(next);
         refs.current[idx - 1]?.focus();
       } else if (value[idx]) {
-        // Current cell has digit — clear it
         const next = [...value];
         next[idx] = "";
         onChange(next);
@@ -59,14 +53,17 @@ export default function OtpInput({ value, onChange, editable = true }) {
         <TextInput
           key={idx}
           ref={(r) => (refs.current[idx] = r)}
-          style={[styles.cell, digit ? styles.cellActive : null]}
+          style={[
+            styles.cell,
+            digit ? styles.cellActive : null,
+            !editable ? styles.cellDisabled : null,
+          ]}
           value={digit}
           onChangeText={(t) => handleChange(t, idx)}
           onKeyPress={(e) => handleKeyPress(e, idx)}
           keyboardType="number-pad"
           editable={editable}
           selectTextOnFocus
-          contextMenuHidden={false}
           autoComplete={idx === 0 ? "one-time-code" : "off"}
           textContentType={idx === 0 ? "oneTimeCode" : "none"}
         />
@@ -78,23 +75,27 @@ export default function OtpInput({ value, onChange, editable = true }) {
 const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 20,
+    justifyContent: "center",
+    gap: 10,
+    marginBottom: 24,
   },
   cell: {
     width: 46,
-    height: 54,
-    borderWidth: 1.5,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
+    height: 60,
+    borderWidth: 2,
+    borderColor: "rgba(229, 231, 235, 0.7)",
+    borderRadius: 16,
     textAlign: "center",
-    fontSize: 20,
-    fontWeight: "700",
+    fontSize: 22,
+    fontWeight: "900",
     color: "#111827",
     backgroundColor: "#FFFFFF",
   },
   cellActive: {
     borderColor: PRIMARY_COLOR,
-    backgroundColor: "#ECFDF5",
+  },
+  cellDisabled: {
+    opacity: 0.5,
+    borderColor: "#FECACA",
   },
 });
