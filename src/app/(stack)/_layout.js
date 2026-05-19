@@ -1,43 +1,20 @@
-import { Stack } from 'expo-router';
+import { Stack } from "expo-router";
 
 export default function StackLayout() {
   return (
-    <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-      <Stack.Screen 
-        name="edit-profile" 
-        options={{ headerShown: false }} 
-      />
-      <Stack.Screen 
-        name="product-detail" 
-        options={{ headerShown: false }} 
-      />
-      <Stack.Screen 
-        name="checkout" 
-        options={{ headerShown: false }} 
-      />
-      <Stack.Screen 
-        name="orders" 
-        options={{ headerShown: false }} 
-      />
-      <Stack.Screen 
-        name="wishlist" 
-        options={{ headerShown: false }} 
-      />
-      <Stack.Screen 
-        name="addresses" 
-        options={{ headerShown: false }} 
-      />
-      <Stack.Screen 
-        name="categories" 
-        options={{ headerShown: false }} 
-      />
-      <Stack.Screen 
-        name="order-success" 
-        options={{ 
-          headerShown: false,
-          gestureEnabled: false,
-        }} 
-      />
+    <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
+      {/* venue management — [id] redirects to (tabs)/venues for backwards compat */}
+      <Stack.Screen name="venues/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="venues/form" options={{ headerShown: false }} />
+
+      {/* walk-in */}
+      <Stack.Screen name="walkin/index" options={{ headerShown: false }} />
+
+      {/* check-in */}
+      <Stack.Screen name="checkin" options={{ headerShown: false }} />
+
+      {/* finance sub-screens (Payouts moved inline into the Finance tab) */}
+      <Stack.Screen name="finance/link-bank" options={{ headerShown: false }} />
     </Stack>
   );
 }

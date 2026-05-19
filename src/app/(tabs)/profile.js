@@ -15,6 +15,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { PRIMARY_COLOR } from "../../constants/theme";
 import { safeReplace } from "../../services/navigationGuard";
+import Header from "../../components/Header";
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -47,7 +48,8 @@ export default function ProfileScreen() {
     .toUpperCase();
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
+    <SafeAreaView style={styles.container} edges={[]}>
+      <Header title="Profile" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Header card with avatar */}
         <View style={styles.header}>

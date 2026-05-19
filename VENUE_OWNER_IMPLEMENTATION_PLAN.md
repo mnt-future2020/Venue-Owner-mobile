@@ -112,13 +112,15 @@ Horizontal scrollable tabs at top of selected venue:
 
 ### Tasks
 
-- [ ] **2.1** Create `src/app/(tabs)/dashboard.js`
-- [ ] **2.2** Create `src/services/analyticsService.js` wrapper for `/venue-finance/analytics/finance-summary` and `/venues/owner/metrics`
-- [ ] **2.3** Stats card component — 2-col responsive grid with icon + label + value + animated entrance
-- [ ] **2.4** Venue list card — show all fields + 4 action buttons; tap card → drill into venue detail (Phase 3)
-- [ ] **2.5** Empty state — when no venues: "Add your first venue" CTA
-- [ ] **2.6** Delete venue confirmation — `AppModal` with venue name typed for confirm
-- [ ] **2.7** Pull-to-refresh on FlatList
+- [x] **2.1** `src/app/(tabs)/dashboard.js` — wired with API + ScrollView + RefreshControl ✅
+- [x] **2.2** Extended `analyticsService.js` with `getVenueAnalytics(venueId, params)` + `getFinanceSummary` ✅
+- [x] **2.3** `components/dashboard/StatCard.js` — 4 cards 2x2 grid (Total Venues / Bookings / Revenue / Avg Booking) with brand/violet/amber/sky tints ✅
+- [x] **2.4** `components/dashboard/VenueCard.js` — hero image + name + sport chips + base price + turfs + rating + status badge + Edit/View/Delete actions ✅
+- [x] **2.5** Empty state — MapPin icon + "Add Your First Venue" CTA ✅
+- [x] **2.6** Delete confirmation — native Alert with destructive style (no modal needed for now) ✅
+- [x] **2.7** Pull-to-refresh + per-venue chip selector when multiple venues ✅
+- [x] **2.8** `DateRangeFilter` component (Today / 7d / 30d / 90d / All) — triggers analytics refetch ✅
+- [x] **2.9** `venueService.create/update/delete` methods added ✅
 
 ---
 
@@ -341,13 +343,13 @@ Show:
 
 ### Tasks
 
-- [ ] **4.1** Create `src/app/(tabs)/bookings.js` (list + filters + stats)
-- [ ] **4.2** Create `src/components/booking/BookingFilterBar.js`
-- [ ] **4.3** Create `src/components/booking/BookingRow.js`
-- [ ] **4.4** Create `src/components/booking/BookingDetailSheet.js`
-- [ ] **4.5** Create `src/components/booking/RefundPreview.js` (computes tier from booking time)
-- [ ] **4.6** Wire `bookingService` methods: `list`, `get`, `cancel`, `collectRemaining`
-- [ ] **4.7** Add pull-to-refresh + pagination (`usePagination` hook already copied)
+- [x] **4.1** `(tabs)/bookings.js` — list + 2x2 stats + filters + pagination + sheet ✅
+- [x] **4.2** `components/booking/BookingFilterBar.js` — debounced search + sort + 3 chip groups ✅
+- [x] **4.3** `components/booking/BookingRow.js` — slot, status, turf+sport, overnight, ₹amount ✅
+- [x] **4.4** `components/booking/BookingDetailSheet.js` — Modal slide-from-bottom with QR + actions ✅
+- [x] **4.5** `components/booking/RefundPreview.js` — IST-aware 24h/4h tiers + max-3-per-7d info ✅
+- [x] **4.6** `components/booking/BookingStatusBadge.js` — color-coded pill ✅
+- [x] **4.7** Wired `bookingService.list/get/cancel/collectRemaining`; pull-to-refresh + onEndReached ✅
 
 ---
 
@@ -426,14 +428,14 @@ UI (POS Terminal screen):
 
 ### Tasks
 
-- [ ] **5.1** Create `src/app/(stack)/walkin/index.js` (multi-step wizard)
-- [ ] **5.2** Create `src/components/walkin/SlotPicker.js`
-- [ ] **5.3** Create `src/components/walkin/CustomerInfoForm.js`
-- [ ] **5.4** Create `src/components/walkin/ReceiptView.js` (with QR via `react-native-qrcode-svg`)
-- [ ] **5.5** Wire WhatsApp share (Linking.openURL) and print (react-native-print)
-- [ ] **5.6** Create `src/app/(stack)/pos/index.js` (POS terminal)
-- [ ] **5.7** Create `src/services/posService.js` (products + sales endpoints)
-- [ ] **5.8** Create `src/components/pos/ProductGrid.js`, `CartPanel.js`, `PaymentSheet.js`
+- [x] **5.1** `(stack)/walkin/index.js` — 3-step wizard (slot → customer → receipt) ✅
+- [x] **5.2** `components/walkin/SlotPicker.js` — venue chip + date + sport + slot grid ✅
+- [x] **5.3** `components/walkin/CustomerInfoForm.js` — name/phone/price/payment type/mode ✅
+- [x] **5.4** `components/walkin/ReceiptView.js` — token + QR + share/print ✅
+- [x] **5.5** WhatsApp share via `Linking.openURL` + react-native-print lazy-loaded ✅
+- [x] **5.6** `(stack)/pos/index.js` — venue chips + categories + grid + cart pill ✅
+- [x] **5.7** `services/posService.js` — listProducts, recordSale, getDailySummary ✅
+- [x] **5.8** `components/pos/ProductGrid.js`, `CartPanel.js`, `PaymentSheet.js` ✅
 
 ---
 

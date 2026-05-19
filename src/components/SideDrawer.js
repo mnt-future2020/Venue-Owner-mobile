@@ -11,13 +11,12 @@ import {
   View,
 } from "react-native";
 import {
-  Rss,
   LayoutDashboard,
-  MapPin,
-  Swords,
+  ClipboardList,
+  Wallet,
+  User,
   LogOut,
 } from "lucide-react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { usePathname, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Logo from "./Logo";
@@ -27,12 +26,12 @@ import { safePush } from "../services/navigationGuard";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const DRAWER_WIDTH = Math.min(SCREEN_WIDTH * 0.78, 320);
 
+// Owner navigation — icons match web sidebar exactly (Navbar.js venue_owner items)
 const MENU_ITEMS = [
-  { label: "Feed", route: "/(tabs)/home", Icon: Rss },
   { label: "Dashboard", route: "/(tabs)/dashboard", Icon: LayoutDashboard },
-  { label: "Venues", route: "/(tabs)/venues", Icon: MapPin },
-  { label: "Matches", route: "/(tabs)/matches", Icon: Swords },
-  { label: "Chat", route: "/(tabs)/chat", ionicon: "chatbubble-ellipses-outline" },
+  { label: "Venue Mgmt", route: "/(tabs)/venues", Icon: ClipboardList },
+  { label: "Finance", route: "/(tabs)/finance", Icon: Wallet },
+  { label: "Profile", route: "/(tabs)/profile", Icon: User },
 ];
 
 export default function SideDrawer({ visible, onClose, onLogout }) {
@@ -121,7 +120,7 @@ export default function SideDrawer({ visible, onClose, onLogout }) {
                 onPress={() => handleNavigate(route)}
               >
                 {active ? <View style={styles.activeBar} /> : null}
-                {Icon ? <Icon size={20} color={color} strokeWidth={2} /> : <Ionicons name={ionicon} size={20} color={color} />}
+                {Icon ? <Icon size={20} color={color} strokeWidth={2} /> : null}
                 <Text style={[styles.menuLabel, active && styles.menuLabelActive]}>{label}</Text>
               </TouchableOpacity>
             );

@@ -1,16 +1,18 @@
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { View, StyleSheet } from "react-native";
 
+// Wrapper used by login/forgot-password. Handles both top status bar and
+// bottom home-indicator/gesture safe areas via SafeAreaView.
 export default function AuthScreen({ children }) {
-  const insets = useSafeAreaInsets();
   return (
-    <SafeAreaView style={[styles.safe, { paddingBottom: insets.bottom }]}>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom", "left", "right"]}>
       <KeyboardAwareScrollView
         contentContainerStyle={styles.scroll}
-        enableOnAndroid={true}
-        extraScrollHeight={100}
+        enableOnAndroid
+        extraScrollHeight={80}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <View style={styles.inner}>{children}</View>
       </KeyboardAwareScrollView>
@@ -28,7 +30,8 @@ const styles = StyleSheet.create({
   },
   inner: {
     flex: 1,
-    padding: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
     justifyContent: "center",
   },
 });
