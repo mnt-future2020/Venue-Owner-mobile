@@ -10,9 +10,11 @@ import { AuthProvider } from "../context/AuthContext";
 import { TabRefreshProvider } from "../context/TabRefreshContext";
 import { LocationProvider } from "../context/LocationContext";
 import ToastManager from "../components/ToastManager";
+import ErrorBoundary from "../components/ui/ErrorBoundary";
 import { KeyboardProvider } from "../lib/keyboardController";
 
-SplashScreen.preventAutoHideAsync();
+// Guard against keep-awake / native-module failures during dev (e.g. Expo Go)
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -27,31 +29,36 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    if (fontsLoaded) SplashScreen.hideAsync();
+    if (fontsLoaded) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
   }, [fontsLoaded]);
 
   if (!fontsLoaded) return null;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <KeyboardProvider statusBarTranslucent={false} navigationBarTranslucent={false}>
-        <SafeAreaProvider>
-          <AuthProvider>
-            <TabRefreshProvider>
-              <LocationProvider>
-                <StatusBar style="dark" backgroundColor="#FFFFFF" translucent={false} />
-                <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
-                  <Stack.Screen name="index" options={{ headerShown: false }} />
-                  <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                  <Stack.Screen name="(stack)" options={{ headerShown: false }} />
-                </Stack>
-                <ToastManager />
-              </LocationProvider>
-            </TabRefreshProvider>
-          </AuthProvider>
-        </SafeAreaProvider>
-      </KeyboardProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
+          <SafeAreaProvider>
+            <AuthProvider>
+              <TabRefreshProvider>
+                <LocationProvider>
+                  {/* translucent so content can flow under; per-screen SafeAreaView handles top/bottom insets */}
+                  <StatusBar style="dark" backgroundColor="transparent" translucent />
+                  <Stack screenOptions={{ headerShown: false, animation: "fade", contentStyle: { backgroundColor: "#F9FAFB" } }}>
+                    <Stack.Screen name="index" options={{ headerShown: false }} />
+                    <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+                    <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                    <Stack.Screen name="(stack)" options={{ headerShown: false }} />
+                  </Stack>
+                  <ToastManager />
+                </LocationProvider>
+              </TabRefreshProvider>
+            </AuthProvider>
+          </SafeAreaProvider>
+        </KeyboardProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }

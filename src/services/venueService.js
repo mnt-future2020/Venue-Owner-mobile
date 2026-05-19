@@ -89,8 +89,10 @@ const venueService = {
   },
 
   // ── Slots availability ─────────────────────────────────
+  // Backend endpoint is /venues/{id}/slots (see backend/routes/venue/venues.py:1198).
+  // The previous /slots-availability path 404'd — Frontend uses /slots too.
   getSlots: async (venueId, date) => {
-    const res = await api.get(`/venues/${venueId}/slots-availability`, { params: { date } });
+    const res = await api.get(`/venues/${venueId}/slots`, { params: { date } });
     return res.data || {};
   },
 
@@ -161,10 +163,37 @@ const venueService = {
     return res.data || {};
   },
 
-  // ── Owner venues (for tournament creation) ──────────────
-  getOwnerVenues: async () => {
-    const res = await api.get("/venues/owner");
+  // ── Places (Google) ─────────────────────────────────────
+  placesAutocomplete: async (q) => {
+    const res = await api.get("/venues/places/autocomplete", { params: { q } });
     return res.data || [];
+  },
+  placeDetails: async (placeId) => {
+    const res = await api.get(`/venues/places/details/${placeId}`);
+    return res.data || {};
+  },
+  reverseGeocode: async (lat, lng) => {
+    const res = await api.get("/venues/reverse-geocode", { params: { lat, lng } });
+    return res.data || {};
+  },
+
+  // ── Owner venues ────────────────────────────────────────
+  // Backend route: GET /owner/venues (in backend/routes/venue/venues.py:1067)
+  getOwnerVenues: async () => {
+    const res = await api.get("/owner/venues");
+    return res.data || [];
+  },
+  create: async (data) => {
+    const res = await api.post("/venues", data);
+    return res.data || {};
+  },
+  update: async (id, data) => {
+    const res = await api.put(`/venues/${id}`, data);
+    return res.data || {};
+  },
+  delete: async (id) => {
+    const res = await api.delete(`/venues/${id}`);
+    return res.data || {};
   },
 };
 

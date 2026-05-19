@@ -1,31 +1,22 @@
-import { useContext, useState } from "react";
+import { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Image } from "expo-image";
-import { User, Bookmark, Settings as SettingsIcon, LogOut } from "lucide-react-native";
+import { User, Settings as SettingsIcon, LogOut } from "lucide-react-native";
 import { usePathname, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Logo from "./Logo";
 import SideDrawer from "./SideDrawer";
 import LogoutModal from "./ui/LogoutModal";
-import LocationPickerModal from "./ui/LocationPickerModal";
 import { PRIMARY_COLOR, FONTS } from "../constants/theme";
 import { useAuth } from "../context/AuthContext";
-import { useLocation } from "../context/LocationContext";
-import { mediaUrl } from "../utils/media";
-import SwipeTabContext from "../context/SwipeTabContext";
-import { safeOpen, safePush } from "../services/navigationGuard";
+import { safePush } from "../services/navigationGuard";
 
-/** Module-level ref — SwipeableTabView calls this directly to open the drawer
- *  without going through context/state propagation. Instant. */
-export const _drawerCtrl = { open: null };
-
+// Owner tab routes — back button auto-hides on these, hamburger shows instead
 const TAB_ROUTES = new Set([
-  "/home",
-  "/matches",
   "/dashboard",
   "/venues",
-  "/chat",
+  "/finance",
+  "/profile",
 ]);
 
 export default function Header({
@@ -36,36 +27,31 @@ export default function Header({
   centerTitle = false,
   actions = [],
   logo = false,
-  showLocation,
   skipSafeArea = false,
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { location } = useLocation();
-  const { inPager, activeTabName } = useContext(SwipeTabContext);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [showLogout, setShowLogout] = useState(false);
-  const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const isTabRoute = TAB_ROUTES.has(pathname);
-  // Only show location icon if this screen requested it AND it's the active pager tab
-  const isActiveScreen = !inPager || activeTabName === "venues" || activeTabName === "matches";
-  const showLocationIcon = showLocation === true && isActiveScreen;
 
+  const isTabRoute = TAB_ROUTES.has(pathname);
   const shouldShowBack = showBack ?? !isTabRoute;
   const shouldShowMenu = showMenu ?? isTabRoute;
+
+  const initials = (user?.name || user?.business_name || "O")
+    .split(" ")
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 
   return (
     <>
       <View style={[styles.container, { paddingTop: skipSafeArea ? 10 : insets.top + 10 }]}>
-        <View
-          style={[
-            styles.leftSection,
-            centerTitle && styles.leftSectionCentered,
-          ]}
-        >
+        <View style={[styles.leftSection, centerTitle && styles.leftSectionCentered]}>
           {shouldShowBack ? (
             <TouchableOpacity
               onPress={() => router.back()}
@@ -76,13 +62,7 @@ export default function Header({
             </TouchableOpacity>
           ) : shouldShowMenu ? (
             <TouchableOpacity
-              onPress={() => {
-                if (inPager) {
-                  safeOpen(() => _drawerCtrl.open?.(), { key: "drawer:pager" });
-                  return;
-                }
-                safeOpen(() => setDrawerVisible(true), { key: "drawer:header" });
-              }}
+              onPress={() => setDrawerVisible(true)}
               style={styles.iconButton}
               activeOpacity={0.8}
             >
@@ -125,132 +105,79 @@ export default function Header({
         </View>
 
         <View style={styles.actionsWrap}>
-          {!Array.isArray(actions) ? actions : actions.map((action) => {
-            if (action.variant === "text") {
-              const isBare = action.appearance === "bare";
-              return (
+          {Array.isArray(actions)
+            ? actions.map((action) => (
                 <TouchableOpacity
                   key={action.key}
                   onPress={action.onPress}
                   style={[
-                    styles.textAction,
-                    isBare && styles.textActionBare,
-                    action.active && !isBare && styles.textActionActive,
+                    styles.iconAction,
+                    action.active && styles.iconActionActive,
                   ]}
                   activeOpacity={0.85}
                 >
                   {action.icon ? (
+                    action.icon
+                  ) : (
                     <Ionicons
-                      name={action.icon}
-                      size={14}
-                      color={
-                        isBare
-                          ? PRIMARY_COLOR
-                          : action.active
-                            ? "#FFFFFF"
-                            : PRIMARY_COLOR
-                      }
-                      style={styles.textActionIcon}
+                      name={action.iconName || "ellipsis-horizontal"}
+                      size={18}
+                      color={action.active ? "#FFFFFF" : "#64748B"}
                     />
+                  )}
+                  {action.badge ? (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>
+                        {action.badge > 9 ? "9+" : action.badge}
+                      </Text>
+                    </View>
                   ) : null}
-                  <Text
-                    style={[
-                      styles.textActionLabel,
-                      isBare && styles.textActionLabelBare,
-                      action.active && !isBare && styles.textActionLabelActive,
-                    ]}
-                  >
-                    {action.label}
-                  </Text>
                 </TouchableOpacity>
-              );
-            }
+              ))
+            : actions}
 
-            return (
-              <TouchableOpacity
-                key={action.key}
-                onPress={action.onPress}
-                style={[
-                  styles.iconAction,
-                  action.active && styles.iconActionActive,
-                ]}
-                activeOpacity={0.85}
-              >
-                <Ionicons
-                  name={action.icon}
-                  size={18}
-                  color={action.active ? "#FFFFFF" : "#64748B"}
-                />
-                {action.badge ? (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{action.badge}</Text>
-                  </View>
-                ) : null}
-              </TouchableOpacity>
-            );
-          })}
-          {showLocationIcon && (
-            <TouchableOpacity
-              style={styles.locationIconBtn}
-              activeOpacity={0.8}
-              onPress={() => setShowLocationPicker(true)}
-            >
-              <Ionicons
-                name="location"
-                size={20}
-                color={location ? PRIMARY_COLOR : "#94A3B8"}
-              />
-              {location && <View style={styles.locationDot} />}
-            </TouchableOpacity>
-          )}
           <TouchableOpacity
             onPress={() => setShowProfileMenu(true)}
             style={styles.profileShortcut}
             activeOpacity={0.85}
           >
-            {user?.avatar ? (
-              <Image
-                source={{ uri: mediaUrl(user.avatar) }}
-                style={styles.profileAvatar}
-                contentFit="cover"
-              />
-            ) : (
-              <View style={[styles.profileAvatar, styles.profileAvatarFallback]}>
-                <Text style={styles.profileAvatarText}>
-                  {(user?.name || user?.username || "P")
-                    .trim()
-                    .charAt(0)
-                    .toUpperCase()}
-                </Text>
-              </View>
-            )}
+            <View style={[styles.profileAvatar, styles.profileAvatarFallback]}>
+              <Text style={styles.profileAvatarText}>{initials}</Text>
+            </View>
           </TouchableOpacity>
         </View>
       </View>
-      {!inPager && (
-        <SideDrawer
-          visible={drawerVisible}
-          onClose={() => setDrawerVisible(false)}
-          onLogout={() => {
-            setDrawerVisible(false);
-            setTimeout(() => setShowLogout(true), 400);
-          }}
-        />
-      )}
-      <LogoutModal visible={showLogout} onClose={() => setShowLogout(false)} />
-      <LocationPickerModal
-        visible={showLocationPicker}
-        onClose={() => setShowLocationPicker(false)}
+
+      <SideDrawer
+        visible={drawerVisible}
+        onClose={() => setDrawerVisible(false)}
+        onLogout={() => {
+          setDrawerVisible(false);
+          setTimeout(() => setShowLogout(true), 400);
+        }}
       />
+      <LogoutModal visible={showLogout} onClose={() => setShowLogout(false)} />
 
       {/* Profile Dropdown */}
-      <Modal visible={showProfileMenu} transparent animationType="fade" onRequestClose={() => setShowProfileMenu(false)} statusBarTranslucent>
-        <Pressable style={styles.dropdownOverlay} onPress={() => setShowProfileMenu(false)}>
+      <Modal
+        visible={showProfileMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowProfileMenu(false)}
+        statusBarTranslucent
+      >
+        <Pressable
+          style={styles.dropdownOverlay}
+          onPress={() => setShowProfileMenu(false)}
+        >
           <View style={[styles.dropdownCard, { top: insets.top + 56 }]}>
             <TouchableOpacity
               style={styles.dropdownItem}
               activeOpacity={0.7}
-              onPress={() => { setShowProfileMenu(false); safePush(router, "/(tabs)/profile"); }}
+              onPress={() => {
+                setShowProfileMenu(false);
+                safePush(router, "/(tabs)/profile");
+              }}
             >
               <User size={18} color="#475569" strokeWidth={2} />
               <Text style={styles.dropdownLabel}>Profile</Text>
@@ -258,15 +185,9 @@ export default function Header({
             <TouchableOpacity
               style={styles.dropdownItem}
               activeOpacity={0.7}
-              onPress={() => { setShowProfileMenu(false); safePush(router, "/(stack)/bookmarks"); }}
-            >
-              <Bookmark size={18} color="#475569" strokeWidth={2} />
-              <Text style={styles.dropdownLabel}>Saved Posts</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.dropdownItem}
-              activeOpacity={0.7}
-              onPress={() => { setShowProfileMenu(false); safePush(router, "/(stack)/settings"); }}
+              onPress={() => {
+                setShowProfileMenu(false);
+              }}
             >
               <SettingsIcon size={18} color="#475569" strokeWidth={2} />
               <Text style={styles.dropdownLabel}>Settings</Text>
@@ -275,7 +196,10 @@ export default function Header({
             <TouchableOpacity
               style={styles.dropdownItem}
               activeOpacity={0.7}
-              onPress={() => { setShowProfileMenu(false); setTimeout(() => setShowLogout(true), 200); }}
+              onPress={() => {
+                setShowProfileMenu(false);
+                setTimeout(() => setShowLogout(true), 200);
+              }}
             >
               <LogOut size={18} color="#EF4444" strokeWidth={2} />
               <Text style={[styles.dropdownLabel, { color: "#EF4444" }]}>Logout</Text>
@@ -304,9 +228,7 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 10,
   },
-  leftSectionCentered: {
-    flex: 1,
-  },
+  leftSectionCentered: { flex: 1 },
   iconButton: {
     width: 40,
     height: 40,
@@ -314,35 +236,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  iconSpacer: {
-    width: 40,
-    height: 40,
-  },
-  titleWrap: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  titleWrapCentered: {
-    alignItems: "center",
-    marginRight: 40,
-  },
-  title: {
-    fontSize: 19,
-    fontWeight: "700",
-    color: "#0F172A",
-  },
-  titleCentered: {
-    textAlign: "center",
-  },
+  iconSpacer: { width: 40, height: 40 },
+  titleWrap: { flex: 1, justifyContent: "center" },
+  titleWrapCentered: { alignItems: "center", marginRight: 40 },
+  title: { fontSize: 19, fontFamily: FONTS.displayBold, fontWeight: "700", color: "#0F172A" },
+  titleCentered: { textAlign: "center" },
   subtitle: {
     marginTop: 2,
     fontSize: 12,
+    fontFamily: FONTS.bodyMedium,
     color: "#64748B",
     fontWeight: "500",
   },
-  subtitleCentered: {
-    textAlign: "center",
-  },
+  subtitleCentered: { textAlign: "center" },
+
   actionsWrap: {
     flexDirection: "row",
     alignItems: "center",
@@ -357,44 +264,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "transparent",
   },
-  iconActionActive: {
-    backgroundColor: "transparent",
-  },
-  textAction: {
-    flexDirection: "row",
-    alignItems: "center",
-    height: 40,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    backgroundColor: "#F0FDF4",
-    borderWidth: 1,
-    borderColor: "#A7F3D0",
-  },
-  textActionBare: {
-    height: 32,
-    paddingHorizontal: 0,
-    borderRadius: 0,
-    backgroundColor: "transparent",
-    borderWidth: 0,
-  },
-  textActionActive: {
-    backgroundColor: PRIMARY_COLOR,
-    borderColor: PRIMARY_COLOR,
-  },
-  textActionIcon: {
-    marginRight: 6,
-  },
-  textActionLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: PRIMARY_COLOR,
-  },
-  textActionLabelBare: {
-    fontSize: 13,
-  },
-  textActionLabelActive: {
-    color: "#FFFFFF",
-  },
+  iconActionActive: { backgroundColor: "transparent" },
   badge: {
     position: "absolute",
     top: 1,
@@ -407,14 +277,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 3,
   },
-  badgeText: {
-    color: "#FFFFFF",
-    fontSize: 9,
-    fontWeight: "700",
-  },
-  profileShortcut: {
-    marginLeft: 0,
-  },
+  badgeText: { color: "#FFFFFF", fontSize: 9, fontWeight: "700" },
+
+  profileShortcut: { marginLeft: 0 },
   profileAvatar: {
     width: 40,
     height: 40,
@@ -429,35 +294,12 @@ const styles = StyleSheet.create({
   },
   profileAvatarText: {
     fontSize: 14,
+    fontFamily: FONTS.bodyExtraBold,
     fontWeight: "800",
     color: PRIMARY_COLOR,
   },
-  locationIconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F0FDF4",
-    borderWidth: 1,
-    borderColor: "#A7F3D0",
-  },
-  locationDot: {
-    position: "absolute",
-    top: 4,
-    right: 4,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: PRIMARY_COLOR,
-    borderWidth: 1.5,
-    borderColor: "#FFFFFF",
-  },
-  /* ── Profile Dropdown ── */
-  dropdownOverlay: {
-    flex: 1,
-    backgroundColor: "transparent",
-  },
+
+  dropdownOverlay: { flex: 1, backgroundColor: "transparent" },
   dropdownCard: {
     position: "absolute",
     right: 16,
@@ -480,14 +322,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
-  dropdownLabel: {
-    fontSize: 14,
-    fontFamily: FONTS.bodyMedium,
-    color: "#1E293B",
-  },
-  dropdownDivider: {
-    height: 1,
-    backgroundColor: "#F1F5F9",
-    marginHorizontal: 12,
-  },
+  dropdownLabel: { fontSize: 14, fontFamily: FONTS.bodyMedium, color: "#1E293B" },
+  dropdownDivider: { height: 1, backgroundColor: "#F1F5F9", marginHorizontal: 12 },
 });
