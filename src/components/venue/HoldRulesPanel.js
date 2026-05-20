@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import useCachedResource from "../../hooks/useCachedResource";
+import { CACHE_TTL } from "../../services/queryCache";
 import {
   View,
   Text,
@@ -42,11 +44,30 @@ function fmt12h(hhmm) {
 }
 
 export default function HoldRulesPanel({ venue }) {
-  const [rules, setRules] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
+
+  // Cached per-venue hold rules. Initial visit shows spinner + fetch; revisit
+  // renders the rule list instantly from cache, then silently revalidates.
+  const {
+    data: rules = [],
+    loading,
+    refresh: refreshRules,
+  } = useCachedResource(
+    venue?.id ? `venue:holds:${venue.id}` : "venue:holds:noop",
+    async () => {
+      if (!venue?.id) return [];
+      try {
+        const res = await venueService.getHoldRules(venue.id);
+        return Array.isArray(res) ? res : [];
+      } catch (err) {
+        toast.error("Load failed", err?.response?.data?.detail || "Try again");
+        return [];
+      }
+    },
+    { ttl: CACHE_TTL.dashboard, enabled: !!venue?.id, revalidateOnMount: false }
+  );
 
   const turfOptions = useMemo(() => {
     const list = [];
@@ -67,22 +88,8 @@ export default function HoldRulesPanel({ venue }) {
     return list;
   }, [venue]);
 
-  const load = async () => {
-    if (!venue?.id) return;
-    setLoading(true);
-    try {
-      const res = await venueService.getHoldRules(venue.id);
-      setRules(Array.isArray(res) ? res : []);
-    } catch (err) {
-      toast.error("Load failed", err?.response?.data?.detail || "Try again");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-  }, [venue?.id]);
+  // Force-revalidate after mutations (create / update / toggle / delete)
+  const load = refreshRules;
 
   const openCreate = () => {
     setEditing(null);
@@ -146,7 +153,7 @@ export default function HoldRulesPanel({ venue }) {
 
   const confirmDelete = (rule) => {
     Alert.alert(
-      "Delete hold rule?",
+      "Delete Hold Rule?",
       `This will permanently delete "${rule.name}". This action cannot be undone.`,
       [
         { text: "Cancel", style: "cancel" },
@@ -196,9 +203,15 @@ export default function HoldRulesPanel({ venue }) {
     <View style={styles.wrapper}>
       <View style={styles.header}>
         <View style={{ flex: 1, paddingRight: 8 }}>
-          <Text style={styles.title}>Hold Rules</Text>
+          <Text style={styles.title} numberOfLines={1}>
+            Hold Rules
+            {venue?.name ? (
+              <Text style={styles.titleVenue}> - {venue.name}</Text>
+            ) : null}
+          </Text>
           <Text style={styles.subtitle}>
             Reserve slots for schools, academies, or recurring bookings.
+            Public won't see held slots.
           </Text>
         </View>
         <TouchableOpacity
@@ -207,7 +220,7 @@ export default function HoldRulesPanel({ venue }) {
           activeOpacity={0.85}
         >
           <Plus size={14} color="#FFFFFF" strokeWidth={2.5} />
-          <Text style={styles.addBtnText}>Create Rule</Text>
+          <Text style={styles.addBtnText}>Add Hold</Text>
         </TouchableOpacity>
       </View>
 
@@ -217,12 +230,11 @@ export default function HoldRulesPanel({ venue }) {
         </View>
       ) : rules.length === 0 ? (
         <View style={styles.empty}>
-          <View style={styles.emptyIcon}>
-            <Lock size={20} color={PRIMARY_COLOR} />
-          </View>
+          {/* Frontend uses muted-foreground (gray), not brand colour */}
+          <Lock size={28} color="#9CA3AF" />
           <Text style={styles.emptyTitle}>No hold rules yet</Text>
           <Text style={styles.emptySub}>
-            Create one to reserve recurring slots.
+            Create one to reserve recurring slots
           </Text>
         </View>
       ) : (
@@ -266,8 +278,10 @@ export default function HoldRulesPanel({ venue }) {
                 >
                   <Edit size={14} color="#6B7280" strokeWidth={2.2} />
                 </TouchableOpacity>
+                {/* Ghost variant — frontend uses transparent bg with
+                    destructive-coloured icon (HoldRulesPanel.js:293-300) */}
                 <TouchableOpacity
-                  style={[styles.iconBtn, { backgroundColor: "#FEF2F2" }]}
+                  style={styles.iconBtn}
                   onPress={() => confirmDelete(r)}
                   activeOpacity={0.7}
                 >
@@ -300,7 +314,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   title: { fontSize: 14, fontWeight: "900", color: "#111827" },
-  subtitle: { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
+  titleVenue: { fontSize: 13, fontWeight: "500", color: "#9CA3AF" },
+  subtitle: { fontSize: 11, color: "#9CA3AF", marginTop: 2, lineHeight: 15 },
   addBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -321,23 +336,11 @@ const styles = StyleSheet.create({
   loading: { alignItems: "center", paddingVertical: 30 },
   empty: {
     alignItems: "center",
-    padding: 30,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "rgba(229, 231, 235, 0.7)",
-    backgroundColor: "#FFFFFF",
+    paddingVertical: 48,
+    gap: 12,
   },
-  emptyIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: `${PRIMARY_COLOR}1A`,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-  },
-  emptyTitle: { fontSize: 14, fontWeight: "900", color: "#111827" },
-  emptySub: { fontSize: 11, color: "#9CA3AF", marginTop: 4 },
+  emptyTitle: { fontSize: 13, fontWeight: "600", color: "#6B7280" },
+  emptySub: { fontSize: 11, color: "#9CA3AF" },
 
   card: {
     flexDirection: "row",

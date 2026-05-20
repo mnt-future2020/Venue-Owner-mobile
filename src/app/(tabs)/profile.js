@@ -1,6 +1,9 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from "react-native";
+import { useContext, useEffect, useRef, useState } from "react";
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import TabRefreshContext from "../../context/TabRefreshContext";
+import useNotificationBell from "../../hooks/useNotificationBell";
+// import SwipeTabContext from "../../context/SwipeTabContext"; // disabled with swipeable pager
 import {
   LogOut,
   Mail,
@@ -14,31 +17,30 @@ import {
 } from "lucide-react-native";
 import { useAuth } from "../../context/AuthContext";
 import { PRIMARY_COLOR } from "../../constants/theme";
-import { safeReplace } from "../../services/navigationGuard";
 import Header from "../../components/Header";
+import LogoutModal from "../../components/ui/LogoutModal";
 
 export default function ProfileScreen() {
-  const router = useRouter();
-  const { user, logout } = useAuth();
+  // Swipeable pager guard — commented out while plain Tabs is in use.
+  // const { inPager } = useContext(SwipeTabContext);
+  // if (!inPager) return null;
 
-  const handleLogout = () => {
-    Alert.alert(
-      "Logout",
-      "Are you sure you want to logout?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Logout",
-          style: "destructive",
-          onPress: async () => {
-            await logout();
-            safeReplace(router, "/(auth)/login");
-          },
-        },
-      ],
-      { cancelable: true }
-    );
-  };
+  const { user } = useAuth();
+  const { refreshSignals } = useContext(TabRefreshContext);
+  const { bellAction } = useNotificationBell();
+  const scrollRef = useRef(null);
+  const [showLogout, setShowLogout] = useState(false);
+
+  // Same-tab tap → scroll top
+  useEffect(() => {
+    if (!refreshSignals.profile) return;
+    scrollRef.current?.scrollTo?.({ y: 0, animated: true });
+  }, [refreshSignals.profile]);
+
+  // Mirrors mobile pattern (Header.js / EditProfileSheet) — open the
+  // shared LogoutModal instead of native Alert. The modal owns the
+  // logout + redirect so this screen just controls visibility.
+  const handleLogout = () => setShowLogout(true);
 
   const initials = (user?.name || "?")
     .split(" ")
@@ -49,8 +51,12 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={[]}>
-      <Header title="Profile" />
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <Header
+        logo
+        showLocation
+        actions={[bellAction]}
+      />
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Header card with avatar */}
         <View style={styles.header}>
           <View style={styles.avatar}>
@@ -88,11 +94,11 @@ export default function ProfileScreen() {
         </View>
 
         {/* Settings section */}
-        <Text style={styles.sectionLabel}>Settings</Text>
+        {/* <Text style={styles.sectionLabel}>Settings</Text>
         <View style={styles.card}>
           <LinkRow icon={<Bell size={16} color="#6B7280" />} label="Notifications" />
           <LinkRow icon={<Lock size={16} color="#6B7280" />} label="Privacy & Security" isLast />
-        </View>
+        </View> */}
 
         {/* Logout */}
         <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn} activeOpacity={0.85}>
@@ -100,8 +106,10 @@ export default function ProfileScreen() {
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
 
-        <Text style={styles.version}>Lobbi Venue · v1.0.0</Text>
+        {/* <Text style={styles.version}>Lobbi Venue · v1.0.0</Text> */}
       </ScrollView>
+
+      <LogoutModal visible={showLogout} onClose={() => setShowLogout(false)} />
     </SafeAreaView>
   );
 }

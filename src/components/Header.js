@@ -7,8 +7,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Logo from "./Logo";
 import SideDrawer from "./SideDrawer";
 import LogoutModal from "./ui/LogoutModal";
+import LocationPickerModal from "./ui/LocationPickerModal";
 import { PRIMARY_COLOR, FONTS } from "../constants/theme";
 import { useAuth } from "../context/AuthContext";
+import { useLocation } from "../context/LocationContext";
 import { safePush } from "../services/navigationGuard";
 
 // Owner tab routes — back button auto-hides on these, hamburger shows instead
@@ -27,15 +29,18 @@ export default function Header({
   centerTitle = false,
   actions = [],
   logo = false,
+  showLocation,
   skipSafeArea = false,
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { location } = useLocation();
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [showLogout, setShowLogout] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
 
   const isTabRoute = TAB_ROUTES.has(pathname);
   const shouldShowBack = showBack ?? !isTabRoute;
@@ -136,6 +141,21 @@ export default function Header({
               ))
             : actions}
 
+          {/* {showLocation && (
+            <TouchableOpacity
+              style={styles.locationIconBtn}
+              activeOpacity={0.8}
+              onPress={() => setShowLocationPicker(true)}
+            >
+              <Ionicons
+                name="location"
+                size={20}
+                color={location ? PRIMARY_COLOR : "#94A3B8"}
+              />
+              {location && <View style={styles.locationDot} />}
+            </TouchableOpacity>
+          )} */}
+
           <TouchableOpacity
             onPress={() => setShowProfileMenu(true)}
             style={styles.profileShortcut}
@@ -157,6 +177,10 @@ export default function Header({
         }}
       />
       <LogoutModal visible={showLogout} onClose={() => setShowLogout(false)} />
+      <LocationPickerModal
+        visible={showLocationPicker}
+        onClose={() => setShowLocationPicker(false)}
+      />
 
       {/* Profile Dropdown */}
       <Modal
@@ -297,6 +321,27 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.bodyExtraBold,
     fontWeight: "800",
     color: PRIMARY_COLOR,
+  },
+  locationIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F0FDF4",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+  },
+  locationDot: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: PRIMARY_COLOR,
+    borderWidth: 1.5,
+    borderColor: "#FFFFFF",
   },
 
   dropdownOverlay: { flex: 1, backgroundColor: "transparent" },

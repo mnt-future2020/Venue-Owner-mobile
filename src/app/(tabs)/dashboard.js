@@ -1,24 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   RefreshControl,
-  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
 import {
   Building2,
   Calendar,
   IndianRupee,
   TrendingUp,
-  Bell,
-  CheckCircle,
-  XCircle,
 } from "lucide-react-native";
 import { useAuth } from "../../context/AuthContext";
 import { PRIMARY_COLOR, FONTS } from "../../constants/theme";
@@ -29,6 +23,12 @@ import StatCard from "../../components/dashboard/StatCard";
 import DateRangeFilter from "../../components/dashboard/DateRangeFilter";
 import RevenueTrendChart from "../../components/dashboard/RevenueTrendChart";
 import Header from "../../components/Header";
+import FullScreenLoader from "../../components/ui/FullScreenLoader";
+import useCachedResource from "../../hooks/useCachedResource";
+import { CACHE_TTL } from "../../services/queryCache";
+import TabRefreshContext from "../../context/TabRefreshContext";
+import useNotificationBell from "../../hooks/useNotificationBell";
+// import SwipeTabContext from "../../context/SwipeTabContext"; // disabled with swipeable pager
 
 // === Filter value → API params (web parity: pass start_date/end_date directly)
 const filterToParams = (filter) => {
@@ -49,87 +49,87 @@ const formatRevenue = (val) => {
 const fmtInr = (n) => `₹${(Number(n) || 0).toLocaleString("en-IN")}`;
 
 export default function DashboardScreen() {
-  const router = useRouter();
+  // Swipeable pager guard — commented out while plain Tabs is in use.
+  // const { inPager } = useContext(SwipeTabContext);
+  // if (!inPager) return null;
+
   const { user } = useAuth();
-  const [venues, setVenues] = useState([]);
-  const [selectedVenue, setSelectedVenue] = useState(null);
-  const [analytics, setAnalytics] = useState(null);
+  const { refreshSignals } = useContext(TabRefreshContext);
+  const scrollRef = useRef(null);
+  const [selectedVenueId, setSelectedVenueId] = useState(null);
   const [dateFilter, setDateFilter] = useState({ preset: "all" });
-  const [loading, setLoading] = useState(true);
-  const [analyticsLoading, setAnalyticsLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
 
-  const loadVenues = useCallback(async () => {
-    const list = await venueService.getOwnerVenues();
-    setVenues(Array.isArray(list) ? list : []);
-    return list;
-  }, []);
+  // Venues list — cached. First-paint shows cached venues instantly;
+  // background revalidation runs silently. Pull-to-refresh / same-tab tap
+  // both call refresh() which bypasses isFresh.
+  const {
+    data: venues = [],
+    loading,
+    refreshing,
+    refresh: refreshVenues,
+  } = useCachedResource(
+    "venue:owner-venues",
+    async () => {
+      const list = await venueService.getOwnerVenues();
+      return Array.isArray(list) ? list : [];
+    },
+    { ttl: CACHE_TTL.venues, revalidateOnMount: false }
+  );
 
-  const loadAnalytics = useCallback(async (venueId, filter) => {
-    if (!venueId) {
-      setAnalytics(null);
-      return;
+  const { bellAction } = useNotificationBell();
+
+  // Selected venue defaults to first venue once they load
+  const selectedVenue = useMemo(() => {
+    if (!Array.isArray(venues) || venues.length === 0) return null;
+    if (selectedVenueId) {
+      const match = venues.find((v) => v.id === selectedVenueId);
+      if (match) return match;
     }
-    setAnalyticsLoading(true);
-    try {
-      const data = await analyticsService.getVenueAnalytics(
-        venueId,
-        filterToParams(filter)
-      );
-      setAnalytics(data || null);
-    } catch (err) {
-      setAnalytics(null);
-    } finally {
-      setAnalyticsLoading(false);
-    }
-  }, []);
+    return venues[0];
+  }, [venues, selectedVenueId]);
 
-  const loadAll = useCallback(async () => {
-    setLoading(true);
-    try {
-      const list = await loadVenues();
-      const first = Array.isArray(list) && list.length ? list[0] : null;
-      setSelectedVenue(first);
-      if (first?.id) {
-        await loadAnalytics(first.id, dateFilter);
-      } else {
-        setAnalytics(null);
+  // Analytics fetch — cached by (venueId, date range). Hot keys are
+  // (venue, all-time) and the user's most recent date range, both of which
+  // stay in the cache, so returning to dashboard renders instantly.
+  const analyticsKey = selectedVenue?.id
+    ? `dashboard:analytics:${selectedVenue.id}:${dateFilter?.start_date || ""}:${dateFilter?.end_date || ""}`
+    : null;
+  const {
+    data: analytics = null,
+    loading: analyticsLoading,
+    refresh: refreshAnalytics,
+  } = useCachedResource(
+    analyticsKey || "dashboard:analytics:noop",
+    async () => {
+      const venueId = selectedVenue?.id;
+      if (!venueId) return null;
+      try {
+        return await analyticsService.getVenueAnalytics(venueId, filterToParams(dateFilter));
+      } catch {
+        return null;
       }
-    } catch (err) {
-      toast.error("Failed to Load", err?.response?.data?.detail || "Could not load venues.");
-    } finally {
-      setLoading(false);
-    }
-  }, [loadVenues, loadAnalytics, dateFilter]);
+    },
+    { ttl: CACHE_TTL.dashboard, enabled: !!analyticsKey, revalidateOnMount: false }
+  );
 
+  const onRefresh = useCallback(() => {
+    Promise.all([
+      refreshVenues().catch(() => {}),
+      refreshAnalytics().catch(() => {}),
+    ]).catch(() => {
+      toast.error("Failed to load dashboard");
+    });
+  }, [refreshVenues, refreshAnalytics]);
+
+  // Same-tab tap → scroll top + refresh
   useEffect(() => {
-    loadAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!refreshSignals.dashboard) return;
+    scrollRef.current?.scrollTo?.({ y: 0, animated: true });
+    onRefresh();
+  }, [refreshSignals.dashboard]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    try {
-      const list = await loadVenues();
-      const current = selectedVenue?.id
-        ? list.find((v) => v.id === selectedVenue.id) || list[0]
-        : list[0];
-      setSelectedVenue(current || null);
-      if (current?.id) await loadAnalytics(current.id, dateFilter);
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const handleDateChange = async (filter) => {
-    setDateFilter(filter);
-    if (selectedVenue?.id) await loadAnalytics(selectedVenue.id, filter);
-  };
-
-  const handleSelectVenue = async (v) => {
-    setSelectedVenue(v);
-    if (v?.id) await loadAnalytics(v.id, dateFilter);
-  };
+  const handleDateChange = (filter) => setDateFilter(filter);
+  const handleSelectVenue = (v) => setSelectedVenueId(v?.id || null);
 
   const stats = useMemo(() => {
     const totalVenues = venues.length;
@@ -155,10 +155,12 @@ export default function DashboardScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={[]}>
-        <Header logo />
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={PRIMARY_COLOR} />
-        </View>
+        <Header
+          logo
+          showLocation
+          actions={[bellAction]}
+        />
+        <FullScreenLoader />
       </SafeAreaView>
     );
   }
@@ -167,17 +169,12 @@ export default function DashboardScreen() {
     <SafeAreaView style={styles.container} edges={[]}>
       <Header
         logo
-        actions={[
-          {
-            key: "notif",
-            icon: <Bell size={16} color="#374151" strokeWidth={2.3} />,
-            onPress: () =>
-              toast.info("Coming soon", "Notifications in a later update."),
-          },
-        ]}
+        showLocation
+        actions={[bellAction]}
       />
 
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -188,23 +185,22 @@ export default function DashboardScreen() {
           />
         }
       >
-        {/* === Hero Banner — matches web's welcome card === */}
+        {/* === Hero Banner — matches frontend welcome card (mobile width).
+            Frontend hides its Unsplash image on narrow widths and shows ONLY
+            the text block. Mobile previously had a Building2 icon inside a
+            tinted square — that was an extra (frontend doesn't render any
+            icon here). Removed for parity. */}
         <View style={styles.hero}>
-          <View style={styles.heroLeft}>
-            <Text style={styles.heroEyebrow}>Venue Owner</Text>
-            <Text style={styles.heroTitle} numberOfLines={2}>
-              Welcome,{" "}
-              <Text style={styles.heroName}>
-                {user?.business_name || user?.name || "Owner"}
-              </Text>
+          <Text style={styles.heroEyebrow}>Venue Owner</Text>
+          <Text style={styles.heroTitle}>
+            Welcome,{" "}
+            <Text style={styles.heroName}>
+              {user?.business_name || user?.name || "Owner"}
             </Text>
-            <Text style={styles.heroSub} numberOfLines={2}>
-              Manage your venues, track revenue, and grow your sports business.
-            </Text>
-          </View>
-          <View style={styles.heroIconWrap}>
-            <Building2 size={36} color={PRIMARY_COLOR} strokeWidth={1.8} />
-          </View>
+          </Text>
+          <Text style={styles.heroSub}>
+            Manage your venues, track revenue, and grow your sports business.
+          </Text>
         </View>
 
         {/* === Venue selector (only when multiple) === */}
@@ -276,7 +272,11 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* === 3 sub-cards row: Total Revenue / Confirmed / Cancelled === */}
+        {/* === 3 sub-cards row: Total Revenue / Confirmed / Cancelled ===
+            Frontend renders plain text labels without inline icons
+            (VenueOwnerDashboard.js:1187-1213). The CheckCircle and XCircle
+            icons mobile previously rendered next to the labels were extras
+            and have been removed for parity. */}
         <View style={styles.subStatsRow}>
           <View style={styles.subStat}>
             <Text style={styles.subStatLabel}>Total Revenue</Text>
@@ -285,19 +285,13 @@ export default function DashboardScreen() {
             </Text>
           </View>
           <View style={styles.subStat}>
-            <View style={styles.subStatLabelRow}>
-              <CheckCircle size={12} color={PRIMARY_COLOR} />
-              <Text style={styles.subStatLabel}>Confirmed</Text>
-            </View>
+            <Text style={styles.subStatLabel}>Confirmed</Text>
             <Text style={[styles.subStatValue, { color: PRIMARY_COLOR }]}>
               {stats.confirmedBookings}
             </Text>
           </View>
           <View style={styles.subStat}>
-            <View style={styles.subStatLabelRow}>
-              <XCircle size={12} color="#EF4444" />
-              <Text style={styles.subStatLabel}>Cancelled</Text>
-            </View>
+            <Text style={styles.subStatLabel}>Cancelled</Text>
             <Text style={[styles.subStatValue, { color: "#EF4444" }]}>
               {stats.cancelledBookings}
             </Text>
@@ -316,18 +310,15 @@ const styles = StyleSheet.create({
   loadingWrap: { flex: 1, alignItems: "center", justifyContent: "center" },
   scroll: { padding: 20, paddingBottom: 40 },
 
-  // Hero
+  // Hero — single column text block (matches frontend mobile-width layout)
   hero: {
-    flexDirection: "row",
     backgroundColor: "#FFFFFF",
     borderRadius: 24,
     padding: 18,
     marginBottom: 18,
     borderWidth: 1,
     borderColor: "rgba(229, 231, 235, 0.7)",
-    alignItems: "center",
   },
-  heroLeft: { flex: 1, paddingRight: 12 },
   heroEyebrow: {
     fontSize: 9,
     fontFamily: FONTS.bodyExtraBold,
@@ -352,15 +343,6 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     lineHeight: 15,
   },
-  heroIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
-    backgroundColor: `${PRIMARY_COLOR}1A`,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
   // Venue selector
   venueChips: { gap: 8, paddingVertical: 4 },
   vChip: {
@@ -400,12 +382,7 @@ const styles = StyleSheet.create({
   subStat: {
     flex: 1,
     alignItems: "flex-start",
-  },
-  subStatLabelRow: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: 4,
-    marginBottom: 4,
   },
   subStatLabel: {
     fontSize: 9,

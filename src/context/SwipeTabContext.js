@@ -1,4 +1,4 @@
-import { createContext } from "react";
+﻿import { createContext } from "react";
 
 const SwipeTabContext = createContext({
   /** true when the screen is inside the tab pager */

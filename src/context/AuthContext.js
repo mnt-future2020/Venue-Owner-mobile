@@ -7,12 +7,19 @@ import { STORAGE_KEYS } from "../constants/storage";
 import { API_BASE } from "../lib/axios";
 
 const AuthContext = createContext(null);
+const AuthLoadingContext = createContext(false);
 
 export const useAuth = () => {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 };
+
+// Subscribe to ONLY the bootstrap-loading flag. The splash screen (index.js)
+// needs this; nothing else does. Keeping it out of the main auth value means
+// when bootstrap finishes (loading flips true → false) we don't tear the
+// whole tree — only the splash component re-renders.
+export const useAuthLoading = () => useContext(AuthLoadingContext);
 
 /* Check if a JWT is expired (or will expire within bufferSec seconds) */
 function isTokenExpired(token, bufferSec = 60) {
@@ -97,11 +104,18 @@ export const AuthProvider = ({ children }) => {
 
         setToken(accessToken);
 
-        // Fetch fresh user data
+        // Fetch fresh user data. Only call setUser if the payload actually
+        // changed vs the cached snapshot — otherwise the context value
+        // recomputes with a new object reference, every consumer re-renders,
+        // and the whole tree (Header + BottomTabBar + active screen) blinks
+        // 1-3 seconds after app start. Deep-compare via JSON.
         try {
           const me = await authService.getMe();
-          setUser(me);
-          await AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(me));
+          const meSerialized = JSON.stringify(me);
+          if (meSerialized !== cachedUser) {
+            setUser(me);
+            await AsyncStorage.setItem(STORAGE_KEYS.user, meSerialized);
+          }
           // Re-read token from storage (interceptor may have refreshed it)
           const latestToken = await AsyncStorage.getItem(STORAGE_KEYS.token);
           if (latestToken && latestToken !== accessToken) {
@@ -170,10 +184,19 @@ export const AuthProvider = ({ children }) => {
     await AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(next));
   };
 
+  // Main value EXCLUDES `loading` so consumers (Header, screens) don't
+  // re-render when bootstrap completes. The few consumers that need the
+  // loading flag (just the splash screen) read it via useAuthLoading().
   const value = useMemo(
-    () => ({ user, token, loading, login, loginWithToken, logout, updateUser }),
-    [user, token, loading]
+    () => ({ user, token, login, loginWithToken, logout, updateUser }),
+    [user, token]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      <AuthLoadingContext.Provider value={loading}>
+        {children}
+      </AuthLoadingContext.Provider>
+    </AuthContext.Provider>
+  );
 };

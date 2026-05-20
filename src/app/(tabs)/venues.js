@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Alert,
   Linking,
   Modal,
@@ -35,6 +34,12 @@ import DropdownSelect from "../../components/ui/DropdownSelect";
 import EmptyState from "../../components/ui/EmptyState";
 import venueService from "../../services/venueService";
 import toast from "../../utils/toast";
+import FullScreenLoader from "../../components/ui/FullScreenLoader";
+import useCachedResource from "../../hooks/useCachedResource";
+import { CACHE_TTL } from "../../services/queryCache";
+import TabRefreshContext from "../../context/TabRefreshContext";
+import useNotificationBell from "../../hooks/useNotificationBell";
+// import SwipeTabContext from "../../context/SwipeTabContext"; // disabled with swipeable pager
 
 import {
   BookingsTab,
@@ -77,39 +82,61 @@ function buildPublicUrl(venue) {
 }
 
 export default function VenueManagementScreen() {
+  // Swipeable pager guard — commented out while plain Tabs is in use.
+  // const { inPager } = useContext(SwipeTabContext);
+  // if (!inPager) return null;
+
   const router = useRouter();
-  const [venues, setVenues] = useState([]);
+  const { refreshSignals } = useContext(TabRefreshContext);
+  const { bellAction } = useNotificationBell();
   const [selectedId, setSelectedId] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("bookings");
+  // Track which sub-tabs the user has visited — once mounted, sub-tabs stay
+  // mounted (display:none when inactive) so switching back doesn't refetch.
+  // Mirrors player app's visitedTabs pattern from SwipeableTabView.
+  const [visitedSubTabs, setVisitedSubTabs] = useState(() => new Set(["bookings"]));
   const [qrOpen, setQrOpen] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
-      const list = await venueService.getOwnerVenues();
-      const arr = Array.isArray(list) ? list : [];
-      setVenues(arr);
-      if (arr.length > 0) {
-        setSelectedId((cur) => {
-          if (cur && arr.some((v) => v.id === cur)) return cur;
-          return arr[0].id;
-        });
-      } else {
-        setSelectedId(null);
-      }
-    } catch (err) {
-      toast.error(
-        "Failed",
-        err?.response?.data?.detail || "Could not load venues."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    load();
-  }, [load]);
+    setVisitedSubTabs((prev) => {
+      if (prev.has(activeTab)) return prev;
+      const next = new Set(prev);
+      next.add(activeTab);
+      return next;
+    });
+  }, [activeTab]);
+
+  // Shared cache key with dashboard — both screens read the same venues list,
+  // so revisiting either tab reuses the cached payload instantly.
+  const {
+    data: venues = [],
+    loading,
+    refresh: refreshVenues,
+  } = useCachedResource(
+    "venue:owner-venues",
+    async () => {
+      const list = await venueService.getOwnerVenues();
+      return Array.isArray(list) ? list : [];
+    },
+    { ttl: CACHE_TTL.venues, revalidateOnMount: false }
+  );
+
+  // Keep selectedId valid when the venues list arrives or changes
+  useEffect(() => {
+    if (!Array.isArray(venues) || venues.length === 0) {
+      if (selectedId !== null) setSelectedId(null);
+      return;
+    }
+    if (!selectedId || !venues.some((v) => v.id === selectedId)) {
+      setSelectedId(venues[0].id);
+    }
+  }, [venues, selectedId]);
+
+  // Same-tab tap → refresh (no scroll-top: this screen has no top-level scroll)
+  useEffect(() => {
+    if (!refreshSignals.venues) return;
+    refreshVenues().catch(() => {});
+  }, [refreshSignals.venues, refreshVenues]);
 
   const selectedVenue = useMemo(
     () => venues.find((v) => v.id === selectedId) || null,
@@ -145,10 +172,14 @@ export default function VenueManagementScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.safe} edges={[]}>
-        <Header title="Venue Management" subtitle="Manage your facilities" />
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={PRIMARY_COLOR} />
-        </View>
+        <Header
+          logo
+          showLocation
+          actions={[
+            bellAction,
+          ]}
+        />
+        <FullScreenLoader />
       </SafeAreaView>
     );
   }
@@ -156,7 +187,13 @@ export default function VenueManagementScreen() {
   if (venues.length === 0) {
     return (
       <SafeAreaView style={styles.safe} edges={[]}>
-        <Header title="Venue Management" subtitle="Manage your facilities" />
+        <Header
+          logo
+          showLocation
+          actions={[
+            bellAction,
+          ]}
+        />
         <View style={styles.emptyWrap}>
           <EmptyState
             title="No venues yet"
@@ -178,8 +215,9 @@ export default function VenueManagementScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={[]}>
       <Header
-        title="Venue Management"
-        subtitle={`${venues.length} ${venues.length === 1 ? "venue" : "venues"}`}
+        logo
+        showLocation
+        actions={[bellAction]}
       />
 
       {/* Venue selector card — dropdown on top row, actions row below
@@ -282,33 +320,56 @@ export default function VenueManagementScreen() {
       {/* Tab content */}
       <View style={styles.contentArea}>
         {!selectedVenue ? (
-          <View style={styles.loadingWrap}>
-            <ActivityIndicator color={PRIMARY_COLOR} />
-          </View>
+          <FullScreenLoader />
         ) : (
           <>
-            {activeTab === "bookings" && (
-              <BookingsTab key={selectedVenue.id} venueId={selectedVenue.id} />
+            {visitedSubTabs.has("bookings") && (
+              <View
+                style={[styles.subTabPane, activeTab !== "bookings" && styles.subTabHidden]}
+                pointerEvents={activeTab === "bookings" ? "auto" : "none"}
+              >
+                <BookingsTab key={selectedVenue.id} venueId={selectedVenue.id} />
+              </View>
             )}
-            {activeTab === "slots" && (
-              <SlotsTab key={selectedVenue.id} venueId={selectedVenue.id} />
+            {visitedSubTabs.has("slots") && (
+              <View
+                style={[styles.subTabPane, activeTab !== "slots" && styles.subTabHidden]}
+                pointerEvents={activeTab === "slots" ? "auto" : "none"}
+              >
+                <SlotsTab key={selectedVenue.id} venueId={selectedVenue.id} />
+              </View>
             )}
-            {activeTab === "holds" && (
-              <HoldsTab key={selectedVenue.id} venue={selectedVenue} />
+            {visitedSubTabs.has("holds") && (
+              <View
+                style={[styles.subTabPane, activeTab !== "holds" && styles.subTabHidden]}
+                pointerEvents={activeTab === "holds" ? "auto" : "none"}
+              >
+                <HoldsTab key={selectedVenue.id} venue={selectedVenue} />
+              </View>
             )}
-            {activeTab === "walkin" && (
-              <WalkinTab
-                key={selectedVenue.id}
-                venueId={selectedVenue.id}
-                venue={selectedVenue}
-              />
+            {visitedSubTabs.has("walkin") && (
+              <View
+                style={[styles.subTabPane, activeTab !== "walkin" && styles.subTabHidden]}
+                pointerEvents={activeTab === "walkin" ? "auto" : "none"}
+              >
+                <WalkinTab
+                  key={selectedVenue.id}
+                  venueId={selectedVenue.id}
+                  venue={selectedVenue}
+                />
+              </View>
             )}
-            {activeTab === "checkin" && (
-              <CheckinTab
-                key={selectedVenue.id}
-                venueId={selectedVenue.id}
-                venueName={selectedVenue?.name}
-              />
+            {visitedSubTabs.has("checkin") && (
+              <View
+                style={[styles.subTabPane, activeTab !== "checkin" && styles.subTabHidden]}
+                pointerEvents={activeTab === "checkin" ? "auto" : "none"}
+              >
+                <CheckinTab
+                  key={selectedVenue.id}
+                  venueId={selectedVenue.id}
+                  venueName={selectedVenue?.name}
+                />
+              </View>
             )}
           </>
         )}
@@ -493,7 +554,11 @@ const styles = StyleSheet.create({
   tabUnderline: { height: 2, width: "100%", backgroundColor: "transparent" },
   tabUnderlineActive: { backgroundColor: PRIMARY_COLOR },
 
-  contentArea: { flex: 1 },
+  contentArea: { flex: 1, position: "relative" },
+  // Sub-tab panes stack on top of each other in the content area; the
+  // inactive ones get display:none so they stay mounted but invisible.
+  subTabPane: { ...StyleSheet.absoluteFillObject },
+  subTabHidden: { display: "none" },
 
   // QR Modal
   qrOverlay: {

@@ -9,6 +9,7 @@ import { useFonts } from "expo-font";
 import { AuthProvider } from "../context/AuthContext";
 import { TabRefreshProvider } from "../context/TabRefreshContext";
 import { LocationProvider } from "../context/LocationContext";
+import { NotificationBadgeProvider } from "../context/NotificationBadgeContext";
 import ToastManager from "../components/ToastManager";
 import ErrorBoundary from "../components/ui/ErrorBoundary";
 import { KeyboardProvider } from "../lib/keyboardController";
@@ -36,23 +37,31 @@ export default function RootLayout() {
 
   if (!fontsLoaded) return null;
 
+  // Root layout mirrors mobile/src/app/_layout.js (player app) exactly —
+  // player has no blink issue so we copy its native config verbatim:
+  //   • StatusBar translucent={false} with solid bg (avoids transparent
+  //     status bar repaints that look like a flash)
+  //   • KeyboardProvider translucent flags = false
+  //   • Stack animation "fade" (proven on mobile)
+  //   • No detachInactiveScreens / freezeOnBlur overrides — defaults work
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
+        <KeyboardProvider statusBarTranslucent={false} navigationBarTranslucent={false}>
           <SafeAreaProvider>
             <AuthProvider>
               <TabRefreshProvider>
                 <LocationProvider>
-                  {/* translucent so content can flow under; per-screen SafeAreaView handles top/bottom insets */}
-                  <StatusBar style="dark" backgroundColor="transparent" translucent />
-                  <Stack screenOptions={{ headerShown: false, animation: "fade", contentStyle: { backgroundColor: "#F9FAFB" } }}>
+                  <NotificationBadgeProvider>
+                  <StatusBar style="dark" backgroundColor="#FFFFFF" translucent={false} />
+                  <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
                     <Stack.Screen name="index" options={{ headerShown: false }} />
                     <Stack.Screen name="(auth)" options={{ headerShown: false }} />
                     <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                     <Stack.Screen name="(stack)" options={{ headerShown: false }} />
                   </Stack>
                   <ToastManager />
+                  </NotificationBadgeProvider>
                 </LocationProvider>
               </TabRefreshProvider>
             </AuthProvider>
