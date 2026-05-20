@@ -7,10 +7,9 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import {
   X,
   Info,
@@ -18,13 +17,11 @@ import {
   AlertCircle,
   CreditCard,
   History,
-  Phone,
 } from "lucide-react-native";
 import { PRIMARY_COLOR, FONTS } from "../../constants/theme";
 import bookingService from "../../services/bookingService";
 import toast from "../../utils/toast";
-import RefundPreview from "./RefundPreview";
-import { getSportIconName } from "../../utils/sportIcons";
+import { getSportIconName } from "../../constants/venueConstants";
 
 // ---------------------------------------------------------------- helpers
 function fmtTime(hhmm) {
@@ -113,8 +110,7 @@ export default function BookingDetailSheet({
   onChanged,
 }) {
   const insets = useSafeAreaInsets();
-  const [methodPickerOpen, setMethodPickerOpen] = useState(false);
-  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [collectConfirmOpen, setCollectConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const isWalkIn =
@@ -135,20 +131,23 @@ export default function BookingDetailSheet({
     return Math.max(0, total - commission - gst);
   }, [booking?.your_earnings, total, commission, gst]);
 
-  const phone =
-    booking?.host_phone || booking?.customer_phone || booking?.phone;
-
   if (!booking) return null;
 
   // ----------------- actions
-  async function handleCollect(method) {
+  // Mirrors frontend `bookingAPI.collectRemaining(id, { method: "cash" })`
+  // and the "Collect Remaining Payment?" confirmation dialog. Method is
+  // HARDCODED as cash (matches frontend; mobile previously asked the user
+  // to pick Cash / UPI / Bank — that was an extra not in frontend).
+  async function handleCollect() {
     if (!booking?.id && !booking?._id) return;
     const id = booking.id || booking._id;
     setBusy(true);
     try {
-      const res = await bookingService.collectRemaining(id, method);
-      toast.success("Payment collected");
-      setMethodPickerOpen(false);
+      const res = await bookingService.collectRemaining(id, "cash");
+      toast.success(
+        `Remaining ${fmtMoney(remaining)} collected successfully!`
+      );
+      setCollectConfirmOpen(false);
       onChanged?.(res);
       onClose?.();
     } catch (err) {
@@ -160,6 +159,9 @@ export default function BookingDetailSheet({
     }
   }
 
+  // Frontend cancels directly on button tap with no confirmation dialog
+  // (VenueOwnerDashboard.js:980-994). Mirroring that behaviour — mobile
+  // previously had a confirmation modal with RefundPreview, removed.
   async function handleCancel() {
     if (!booking?.id && !booking?._id) return;
     const id = booking.id || booking._id;
@@ -167,7 +169,6 @@ export default function BookingDetailSheet({
     try {
       const res = await bookingService.cancel(id);
       toast.success("Booking cancelled");
-      setCancelConfirmOpen(false);
       onChanged?.(res);
       onClose?.();
     } catch (err) {
@@ -177,20 +178,6 @@ export default function BookingDetailSheet({
     } finally {
       setBusy(false);
     }
-  }
-
-  function handleContact() {
-    if (!phone) {
-      toast.error("No phone number available");
-      return;
-    }
-    const cleaned = String(phone).replace(/\D/g, "").slice(-10);
-    const waUrl = `whatsapp://send?phone=91${cleaned}`;
-    Linking.openURL(waUrl).catch(() => {
-      Linking.openURL(`tel:${cleaned}`).catch(() =>
-        toast.error("Couldn't open contact app")
-      );
-    });
   }
 
   // ----------------- derived UI
@@ -330,7 +317,7 @@ export default function BookingDetailSheet({
                     value={titleCase(booking.sport) || "—"}
                     leadingIcon={
                       booking.sport ? (
-                        <Ionicons
+                        <MaterialCommunityIcons
                           name={sportIconName}
                           size={13}
                           color="#111827"
@@ -481,22 +468,22 @@ export default function BookingDetailSheet({
                     </Text>
                   </View>
                 ) : null}
-                {booking.cancelled_at ? (
-                  <View style={styles.kvRow}>
-                    <Text style={styles.timelineLabel}>Cancelled at</Text>
-                    <Text style={styles.timelineValue}>
-                      {fmtDateTimeDDMM(booking.cancelled_at)}
-                    </Text>
-                  </View>
-                ) : null}
+                {/* Frontend timeline shows only Created + Confirmed at; the
+                    "Cancelled at" row was a mobile-only extra and has been
+                    removed for parity (VenueOwnerDashboard.js:2411-2455). */}
               </View>
 
-              {/* Actions */}
+              {/* Actions — mirrors frontend exactly:
+                  - Collect Remaining (walk-in + remaining > 0) opens the
+                    "Collect Remaining Payment?" confirm; cash hardcoded.
+                  - Cancel Booking fires the cancel API directly with no
+                    confirmation (frontend does the same).
+                  - NO "Contact Player" button — that was a mobile-only extra. */}
               <View style={styles.actions}>
                 {isWalkIn && remaining > 0 ? (
                   <TouchableOpacity
                     style={[styles.btn, styles.btnPrimary]}
-                    onPress={() => setMethodPickerOpen(true)}
+                    onPress={() => setCollectConfirmOpen(true)}
                     activeOpacity={0.85}
                     disabled={busy}
                   >
@@ -510,23 +497,14 @@ export default function BookingDetailSheet({
                 {isCancellable ? (
                   <TouchableOpacity
                     style={[styles.btn, styles.btnDanger]}
-                    onPress={() => setCancelConfirmOpen(true)}
+                    onPress={handleCancel}
                     activeOpacity={0.85}
                     disabled={busy}
                   >
                     <X size={16} color="#FFFFFF" />
-                    <Text style={styles.btnDangerText}>Cancel Booking</Text>
-                  </TouchableOpacity>
-                ) : null}
-
-                {phone ? (
-                  <TouchableOpacity
-                    style={[styles.btn, styles.btnSecondary]}
-                    onPress={handleContact}
-                    activeOpacity={0.85}
-                  >
-                    <Phone size={16} color="#111827" />
-                    <Text style={styles.btnSecondaryText}>Contact Player</Text>
+                    <Text style={styles.btnDangerText}>
+                      {busy ? "Cancelling..." : "Cancel Booking"}
+                    </Text>
                   </TouchableOpacity>
                 ) : null}
               </View>
@@ -535,96 +513,50 @@ export default function BookingDetailSheet({
         </View>
       </Modal>
 
-      {/* Method picker overlay */}
+      {/* Collect Remaining Payment? — single-step confirm dialog mirroring
+          frontend (VenueOwnerDashboard.js:4153-4194). Cash is hardcoded;
+          mobile previously asked the user to pick Cash / UPI / Bank — that
+          method picker was an extra not in frontend. */}
       <Modal
-        visible={methodPickerOpen}
+        visible={collectConfirmOpen}
         transparent
         animationType="fade"
         statusBarTranslucent
-        onRequestClose={() => !busy && setMethodPickerOpen(false)}
+        onRequestClose={() => !busy && setCollectConfirmOpen(false)}
       >
         <View style={pickStyles.overlay}>
           <View style={pickStyles.card}>
-            <Text style={pickStyles.title}>Collect Payment</Text>
+            <Text style={pickStyles.title}>Collect Remaining Payment?</Text>
             <Text style={pickStyles.sub}>
-              {fmtMoney(remaining)} remaining · how was it collected?
+              This will mark{" "}
+              <Text style={pickStyles.subStrong}>{fmtMoney(remaining)}</Text>{" "}
+              as collected via cash. This action cannot be undone.
             </Text>
-            <View style={pickStyles.btnRow}>
-              {[
-                { v: "cash", label: "Cash" },
-                { v: "upi", label: "UPI" },
-                { v: "bank_transfer", label: "Bank" },
-              ].map((opt) => (
-                <TouchableOpacity
-                  key={opt.v}
-                  style={pickStyles.methodBtn}
-                  onPress={() => handleCollect(opt.v)}
-                  activeOpacity={0.85}
-                  disabled={busy}
-                >
-                  <Text style={pickStyles.methodBtnText}>{opt.label}</Text>
-                </TouchableOpacity>
-              ))}
+            <View style={pickStyles.confirmRow}>
+              <TouchableOpacity
+                style={[pickStyles.confirmBtn, pickStyles.confirmBtnSecondary]}
+                onPress={() => !busy && setCollectConfirmOpen(false)}
+                activeOpacity={0.85}
+                disabled={busy}
+              >
+                <Text style={pickStyles.confirmBtnSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[pickStyles.confirmBtn, pickStyles.confirmBtnAmber]}
+                onPress={handleCollect}
+                activeOpacity={0.85}
+                disabled={busy}
+              >
+                <Text style={pickStyles.confirmBtnAmberText}>
+                  {busy ? "Collecting…" : "Collect Payment"}
+                </Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={pickStyles.cancelBtn}
-              onPress={() => !busy && setMethodPickerOpen(false)}
-              activeOpacity={0.7}
-              disabled={busy}
-            >
-              <Text style={pickStyles.cancelBtnText}>
-                {busy ? "Working…" : "Cancel"}
-              </Text>
-            </TouchableOpacity>
             {busy ? (
               <View style={pickStyles.busyOverlay}>
                 <ActivityIndicator color={PRIMARY_COLOR} />
               </View>
             ) : null}
-          </View>
-        </View>
-      </Modal>
-
-      {/* Cancel confirm with refund preview */}
-      <Modal
-        visible={cancelConfirmOpen}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={() => !busy && setCancelConfirmOpen(false)}
-      >
-        <View style={pickStyles.overlay}>
-          <View style={pickStyles.card}>
-            <Text style={pickStyles.title}>Cancel Booking?</Text>
-            <Text style={pickStyles.sub}>
-              This will cancel the booking and free the slot. Refund follows the
-              tier below.
-            </Text>
-            <View style={{ marginVertical: 12 }}>
-              <RefundPreview booking={booking} />
-            </View>
-            <View style={pickStyles.confirmRow}>
-              <TouchableOpacity
-                style={[pickStyles.confirmBtn, pickStyles.confirmBtnSecondary]}
-                onPress={() => !busy && setCancelConfirmOpen(false)}
-                activeOpacity={0.85}
-                disabled={busy}
-              >
-                <Text style={pickStyles.confirmBtnSecondaryText}>
-                  Keep Booking
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[pickStyles.confirmBtn, pickStyles.confirmBtnDanger]}
-                onPress={handleCancel}
-                activeOpacity={0.85}
-                disabled={busy}
-              >
-                <Text style={pickStyles.confirmBtnDangerText}>
-                  {busy ? "Cancelling…" : "Confirm Cancel"}
-                </Text>
-              </TouchableOpacity>
-            </View>
           </View>
         </View>
       </Modal>
@@ -959,6 +891,13 @@ const pickStyles = StyleSheet.create({
     color: "#6B7280",
     lineHeight: 18,
   },
+  // Bold amount inline in the confirm body — mirrors frontend's
+  // `font-semibold text-foreground` span on the rupee amount.
+  subStrong: {
+    fontFamily: FONTS.bodyExtraBold,
+    fontWeight: "800",
+    color: "#111827",
+  },
   btnRow: {
     flexDirection: "row",
     gap: 8,
@@ -1020,6 +959,18 @@ const pickStyles = StyleSheet.create({
     backgroundColor: "#DC2626",
   },
   confirmBtnDangerText: {
+    color: "#FFFFFF",
+    fontFamily: FONTS.bodyExtraBold,
+    fontWeight: "900",
+    fontSize: 13,
+  },
+  // Amber-600 — matches frontend's "Collect Payment" confirm button
+  // (bg-amber-600 hover:bg-amber-700 text-white) in
+  // VenueOwnerDashboard.js:4172.
+  confirmBtnAmber: {
+    backgroundColor: "#D97706",
+  },
+  confirmBtnAmberText: {
     color: "#FFFFFF",
     fontFamily: FONTS.bodyExtraBold,
     fontWeight: "900",

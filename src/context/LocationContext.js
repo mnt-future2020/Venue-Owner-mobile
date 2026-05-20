@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const STORAGE_KEY = "LOBBI_USER_LOCATION";
@@ -38,8 +38,16 @@ export function LocationProvider({ children }) {
     await AsyncStorage.removeItem(STORAGE_KEY);
   }, []);
 
+  // Memoize so the provider doesn't hand out a new context-value object on
+  // every render — keeps consumers (Header, profile screen) referentially
+  // stable and prevents cascading re-renders.
+  const value = useMemo(
+    () => ({ location, setLocation, clearLocation, loaded }),
+    [location, setLocation, clearLocation, loaded]
+  );
+
   return (
-    <LocationContext.Provider value={{ location, setLocation, clearLocation, loaded }}>
+    <LocationContext.Provider value={value}>
       {children}
     </LocationContext.Provider>
   );

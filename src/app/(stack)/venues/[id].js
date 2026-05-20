@@ -20,6 +20,7 @@ import { useRouter } from "expo-router";
 import {
   Calendar,
   CalendarDays,
+  History,
   CheckCircle,
   CheckCheck,
   Clock,
@@ -51,7 +52,9 @@ import toast from "../../../utils/toast";
 
 import StatCard from "../../../components/dashboard/StatCard";
 import EmptyState from "../../../components/ui/EmptyState";
+import FullScreenLoader from "../../../components/ui/FullScreenLoader";
 import DropdownSelect from "../../../components/ui/DropdownSelect";
+import CalendarPicker from "../../../components/ui/CalendarPicker";
 import DateRangeFilter from "../../../components/dashboard/DateRangeFilter";
 import BookingRow from "../../../components/booking/BookingRow";
 import BookingDetailSheet from "../../../components/booking/BookingDetailSheet";
@@ -60,7 +63,9 @@ import HoldRulesPanel from "../../../components/venue/HoldRulesPanel";
 import QRScanner from "../../../components/checkin/QRScanner";
 import CheckinConfirmCard from "../../../components/checkin/CheckinConfirmCard";
 
-const PAGE_LIMIT = 15;
+// Matches frontend BOOKING_LIMIT (VenueOwnerDashboard.js:316). Keep these
+// in sync so pagination ranges and total-page math align between the apps.
+const PAGE_LIMIT = 10;
 
 // ───────────── helpers ─────────────
 function pad2(n) {
@@ -170,19 +175,30 @@ function ModePill({ options, value, onChange, inline = false }) {
 }
 
 // ───────────── BOOKINGS sub-tab ─────────────
-export function BookingsTab({ venueId }) {
-  const [view, setView] = useState("list");
-  const [status, setStatus] = useState("all");
-  const [timeFilter, setTimeFilter] = useState("all");
-  const [sortOrder, setSortOrder] = useState("desc");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [localQuery, setLocalQuery] = useState("");
+// Module-level cache (mobile pattern). Persists across mount/unmount so the
+// last-seen list + stats render instantly on remount; only the silent
+// background revalidate runs. Keyed by venueId so multi-venue switching
+// preserves each venue's last view.
+const _bookingsCache = {};
 
-  const [bookings, setBookings] = useState([]);
-  const [stats, setStats] = useState({});
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(true);
+export function BookingsTab({ venueId }) {
+  // Today (ISO YYYY-MM-DD) — used for timeline date-dot color states
+  // (matches frontend isToday / isFuture / isPast logic).
+  const today = useMemo(() => toIsoDate(new Date()), []);
+  const cached = _bookingsCache[venueId];
+  const [view, setView] = useState(cached?.view || "list");
+  const [status, setStatus] = useState(cached?.status || "all");
+  const [timeFilter, setTimeFilter] = useState(cached?.timeFilter || "all");
+  const [sortOrder, setSortOrder] = useState(cached?.sortOrder || "desc");
+  const [searchQuery, setSearchQuery] = useState(cached?.searchQuery || "");
+  const [localQuery, setLocalQuery] = useState(cached?.searchQuery || "");
+
+  const [bookings, setBookings] = useState(cached?.bookings || []);
+  const [stats, setStats] = useState(cached?.stats || {});
+  const [page, setPage] = useState(cached?.page || 1);
+  const [totalPages, setTotalPages] = useState(cached?.totalPages || 1);
+  // Only show the full-screen spinner on the very first visit for this venue.
+  const [loading, setLoading] = useState(!cached);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState(null);
@@ -218,15 +234,31 @@ export function BookingsTab({ venueId }) {
     async (pg, { append = false, isRefresh = false } = {}) => {
       if (fetchInFlight.current) return;
       fetchInFlight.current = true;
-      if (!append && !isRefresh) setLoading(true);
+      if (!append && !isRefresh && !_bookingsCache[venueId]) setLoading(true);
       if (append) setLoadingMore(true);
       try {
         const params = buildParams(pg);
         const data = await bookingService.list(params);
         const list = Array.isArray(data?.bookings) ? data.bookings : [];
-        setBookings((prev) => (append ? [...prev, ...list] : list));
-        setStats(data?.stats || {});
-        setTotalPages(data?.pages || 1);
+        const nextStats = data?.stats || {};
+        const nextPages = data?.pages || 1;
+        setBookings((prev) => {
+          const merged = append ? [...prev, ...list] : list;
+          _bookingsCache[venueId] = {
+            bookings: merged,
+            stats: nextStats,
+            totalPages: nextPages,
+            page: pg,
+            view,
+            status,
+            timeFilter,
+            sortOrder,
+            searchQuery,
+          };
+          return merged;
+        });
+        setStats(nextStats);
+        setTotalPages(nextPages);
         setPage(pg);
       } catch (err) {
         const msg = err?.response?.data?.detail || err?.message || "Failed to load bookings";
@@ -238,10 +270,17 @@ export function BookingsTab({ venueId }) {
         setLoadingMore(false);
       }
     },
-    [buildParams]
+    [buildParams, venueId, view, status, timeFilter, sortOrder, searchQuery]
   );
 
+  // Skip the very first fetch when we already have cached data for this
+  // venue — subsequent filter/search changes still trigger fresh fetches.
+  const skipMountFetchRef = useRef(!!cached);
   useEffect(() => {
+    if (skipMountFetchRef.current) {
+      skipMountFetchRef.current = false;
+      return;
+    }
     fetchPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, timeFilter, sortOrder, searchQuery, venueId]);
@@ -450,22 +489,37 @@ export function BookingsTab({ venueId }) {
       // separate <View>) so the search TextInput inside renderHeader stays
       // mounted while the API call is in flight — otherwise the tree swap
       // unmounts the input and the keyboard closes after one keystroke.
-      return (
-        <View style={tabStyles.initialLoad}>
-          <ActivityIndicator color={PRIMARY_COLOR} />
-        </View>
-      );
+      return <FullScreenLoader style={tabStyles.initialLoad} />;
     }
+    // Differentiate "filters yielded nothing" from "venue has no bookings"
+    // (matches frontend VenueOwnerDashboard.js:1670-1676 / 1855-1859).
+    const filtersActive =
+      (status && status !== "all") ||
+      (timeFilter && timeFilter !== "all") ||
+      !!searchQuery?.trim();
+    const isTimeline = view === "timeline";
     return (
       <View style={{ paddingTop: 20 }}>
         <EmptyState
-          icon={Calendar}
-          title="No bookings yet"
-          subtitle="When customers book this venue, they'll show up here."
+          icon={isTimeline ? History : Calendar}
+          title={
+            isTimeline
+              ? "No booking history"
+              : filtersActive
+                ? "No bookings match your filters"
+                : "No bookings yet"
+          }
+          subtitle={
+            isTimeline
+              ? undefined
+              : filtersActive
+                ? "Try clearing or changing your filters."
+                : "When customers book this venue, they'll show up here."
+          }
         />
       </View>
     );
-  }, [loading]);
+  }, [loading, status, timeFilter, searchQuery, view]);
 
   // NOTE: do NOT early-return a different JSX tree based on `loading` here.
   // Doing so swaps the outer component and unmounts the search TextInput
@@ -494,11 +548,27 @@ export function BookingsTab({ venueId }) {
             renderEmpty()
           ) : (
             <>
-              {grouped.map(([date, list]) => (
+              {grouped.map(([date, list]) => {
+                // Timeline date-dot color matches frontend's isToday /
+                // future / past states: brand-green today, sky for future
+                // dates, muted gray for past dates.
+                const isToday = date === today;
+                const isFuture = date > today;
+                const dotColor = isToday
+                  ? PRIMARY_COLOR
+                  : isFuture
+                    ? "#38BDF8" // sky-400
+                    : "rgba(107, 114, 128, 0.4)";
+                return (
                 <View key={date} style={{ marginBottom: 14 }}>
                   <View style={tabStyles.timelineDateRow}>
                     <View style={tabStyles.timelineDateLeft}>
-                      <View style={tabStyles.timelineDot} />
+                      <View
+                        style={[
+                          tabStyles.timelineDot,
+                          { backgroundColor: dotColor },
+                        ]}
+                      />
                       <Text style={tabStyles.timelineDate}>
                         {(() => {
                           const d = new Date(date + "T00:00:00");
@@ -526,7 +596,8 @@ export function BookingsTab({ venueId }) {
                     />
                   ))}
                 </View>
-              ))}
+                );
+              })}
               {page >= totalPages && bookings.length > 0 ? (
                 <Text style={tabStyles.timelineAllLoaded}>
                   All bookings loaded
@@ -589,11 +660,19 @@ export function BookingsTab({ venueId }) {
 }
 
 // ───────────── SLOTS sub-tab ─────────────
+// Module-level cache keyed by venueId + date — switching dates is the hot
+// path. Last seen date+slots renders instantly on remount.
+const _slotsCache = {};
+const slotsCacheKey = (venueId, date) => `${venueId || ""}|${date || ""}`;
+
 export function SlotsTab({ venueId }) {
   const today = useMemo(() => toIsoDate(new Date()), []);
   const [selectedDate, setSelectedDate] = useState(today);
-  const [slots, setSlots] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const initialKey = slotsCacheKey(venueId, today);
+  const initialCached = _slotsCache[initialKey];
+  const [slots, setSlots] = useState(initialCached?.slots || []);
+  // Spinner only fires when this (venue, date) combo has never been fetched.
+  const [loading, setLoading] = useState(!initialCached);
   const [bookingDetail, setBookingDetail] = useState(null);
   // Unreserve held-slot dialog state (mirrors frontend unreserveSlot)
   const [unreserveSlot, setUnreserveSlot] = useState(null);
@@ -604,23 +683,40 @@ export function SlotsTab({ venueId }) {
   const [statLoading, setStatLoading] = useState(false);
   // Inline Walk-in Booking modal state (mirrors frontend walkInOpen / walkInSlot)
   const [walkInSlot, setWalkInSlot] = useState(null);
+  // Calendar picker visibility (date label tap → opens picker modal)
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
-  const loadSlots = useCallback(async () => {
-    if (!venueId || !selectedDate) return;
-    setLoading(true);
-    try {
-      const res = await venueService.getSlots(venueId, selectedDate);
-      setSlots(Array.isArray(res?.slots) ? res.slots : []);
-    } catch (err) {
-      setSlots([]);
-      toast.error(
-        "Could not load slots",
-        err?.response?.data?.detail || "Try again."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [venueId, selectedDate]);
+  const loadSlots = useCallback(
+    async ({ force = false } = {}) => {
+      if (!venueId || !selectedDate) return;
+      const key = slotsCacheKey(venueId, selectedDate);
+      const cached = _slotsCache[key];
+      // Cache hit + not forced → render cached slots, skip fetch entirely.
+      // Caller (refresh button / pull-to-refresh / mutation) passes
+      // { force: true } to bypass the cache and refetch.
+      if (cached && !force) {
+        setSlots(cached.slots);
+        setLoading(false);
+        return;
+      }
+      if (!cached) setLoading(true);
+      try {
+        const res = await venueService.getSlots(venueId, selectedDate);
+        const list = Array.isArray(res?.slots) ? res.slots : [];
+        _slotsCache[key] = { slots: list };
+        setSlots(list);
+      } catch (err) {
+        if (!cached) setSlots([]);
+        toast.error(
+          "Could not load slots",
+          err?.response?.data?.detail || "Try again."
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [venueId, selectedDate]
+  );
 
   useEffect(() => {
     loadSlots();
@@ -949,16 +1045,20 @@ export function SlotsTab({ venueId }) {
             >
               <ChevronLeft size={18} color="#0F172A" />
             </TouchableOpacity>
-            <View style={tabStyles.dateLabelGroup}>
-              <Text style={tabStyles.dateNavText}>{dateLabel}</Text>
-              {isPastDate ? (
-                <View style={tabStyles.pastViewOnlyPill}>
-                  <Text style={tabStyles.pastViewOnlyText}>
-                    Past — View Only
-                  </Text>
-                </View>
-              ) : null}
-            </View>
+            {/* Date label + calendar icon — single row, opens picker on tap.
+                The "Past — View Only" pill is rendered BELOW this row so it
+                does not break the vertical alignment with the chevrons. */}
+            <TouchableOpacity
+              onPress={() => setDatePickerOpen(true)}
+              style={tabStyles.dateLabelTrigger}
+              activeOpacity={0.7}
+              hitSlop={6}
+            >
+              <Text style={tabStyles.dateNavText} numberOfLines={1}>
+                {dateLabel}
+              </Text>
+              <Calendar size={14} color="#6B7280" />
+            </TouchableOpacity>
             <TouchableOpacity
               onPress={() => shiftDate(1)}
               style={tabStyles.dateNavBtn}
@@ -970,10 +1070,20 @@ export function SlotsTab({ venueId }) {
           <View style={{ width: 64 }} />
         </View>
 
-        {loading ? (
-          <View style={tabStyles.initialLoad}>
-            <ActivityIndicator color={PRIMARY_COLOR} />
+        {/* Past pill on its own row, centred — avoids stretching the
+            chevron+date row to 2 lines and misaligning the buttons. */}
+        {isPastDate ? (
+          <View style={tabStyles.pastViewOnlyRow}>
+            <View style={tabStyles.pastViewOnlyPill}>
+              <Text style={tabStyles.pastViewOnlyText}>
+                Past — View Only
+              </Text>
+            </View>
           </View>
+        ) : null}
+
+        {loading ? (
+          <FullScreenLoader style={tabStyles.initialLoad} />
         ) : slots.length === 0 ? (
           <View style={{ paddingTop: 24 }}>
             <EmptyState
@@ -1261,6 +1371,17 @@ export function SlotsTab({ venueId }) {
         onBooked={loadSlots}
       />
 
+      {/* Calendar date picker — mirrors frontend <input type="date">
+          between the chevrons. Opens when user taps the date label. */}
+      <CalendarPicker
+        controlled
+        visible={datePickerOpen}
+        onClose={() => setDatePickerOpen(false)}
+        value={selectedDate}
+        onChange={(d) => setSelectedDate(d)}
+        minDate={null}
+      />
+
       {/* Unreserve held slot dialog — mirrors frontend Unreserve Slot? dialog */}
       <Modal
         visible={!!unreserveSlot}
@@ -1322,7 +1443,7 @@ export function SlotsTab({ venueId }) {
                         );
                         toast.success("This slot has been unreserved");
                         setUnreserveSlot(null);
-                        loadSlots();
+                        loadSlots({ force: true });
                       } catch (err) {
                         toast.error(
                           err?.response?.data?.detail || "Failed to unreserve"
@@ -1487,31 +1608,40 @@ export function HoldsTab({ venue }) {
 }
 
 // ───────────── WALK-IN sub-tab ─────────────
-export function WalkinTab({ venueId, venue }) {
-  const [dateFilter, setDateFilter] = useState({ preset: "all" });
-  const [searchQuery, setSearchQuery] = useState("");
-  const [localQuery, setLocalQuery] = useState("");
+// Module-level cache keyed by venueId — preserves last walk-in list view
+// across mount/unmount so revisiting the tab does not re-trigger spinner.
+const _walkinCache = {};
 
+export function WalkinTab({ venueId, venue }) {
+  const cached = _walkinCache[venueId];
+  const [dateFilter, setDateFilter] = useState(cached?.dateFilter || { preset: "all" });
+  const [searchQuery, setSearchQuery] = useState(cached?.searchQuery || "");
+  const [localQuery, setLocalQuery] = useState(cached?.searchQuery || "");
+
+  // Verbatim match to frontend presetLabels (VenueOwnerDashboard.js:3858-3863).
+  // "Last 7 Days" / "Last 30 Days" — NO trailing apostrophe (those phrases
+  // are not possessive). "Filtered" — NOT "Selected Range".
   const RANGE_LABEL_MAP = {
     all: "Total",
     today: "Today's",
     yesterday: "Yesterday's",
-    last7: "Last 7 Days'",
+    last7: "Last 7 Days",
     thisWeek: "This Week's",
     thisMonth: "This Month's",
     lastMonth: "Last Month's",
-    last30: "Last 30 Days'",
-    custom: "Selected Range",
+    last30: "Last 30 Days",
+    custom: "Filtered",
   };
   const rangeLabel =
     RANGE_LABEL_MAP[dateFilter?.preset || "all"] || "Total";
 
-  const [bookings, setBookings] = useState([]);
-  const [walkinStats, setWalkinStats] = useState({});
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [bookings, setBookings] = useState(cached?.bookings || []);
+  const [walkinStats, setWalkinStats] = useState(cached?.walkinStats || {});
+  const [page, setPage] = useState(cached?.page || 1);
+  const [totalPages, setTotalPages] = useState(cached?.totalPages || 1);
+  const [total, setTotal] = useState(cached?.total || 0);
+  // Spinner only on the very first fetch for this venue.
+  const [loading, setLoading] = useState(!cached);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState(null);
 
@@ -1548,16 +1678,28 @@ export function WalkinTab({ venueId, venue }) {
     async (pg, { isRefresh = false } = {}) => {
       if (fetchInFlight.current) return;
       fetchInFlight.current = true;
-      if (!isRefresh) setLoading(true);
+      if (!isRefresh && !_walkinCache[venueId]) setLoading(true);
       try {
         const params = buildParams(pg);
         const data = await bookingService.list(params);
         const list = Array.isArray(data?.bookings) ? data.bookings : [];
+        const stats = data?.walkin_stats || {};
+        const pages = data?.pages || 1;
+        const tot = Number(data?.total) || list.length;
         setBookings(list);
-        setWalkinStats(data?.walkin_stats || {});
-        setTotalPages(data?.pages || 1);
-        setTotal(Number(data?.total) || list.length);
+        setWalkinStats(stats);
+        setTotalPages(pages);
+        setTotal(tot);
         setPage(pg);
+        _walkinCache[venueId] = {
+          bookings: list,
+          walkinStats: stats,
+          totalPages: pages,
+          total: tot,
+          page: pg,
+          dateFilter,
+          searchQuery,
+        };
       } catch (err) {
         const msg =
           err?.response?.data?.detail ||
@@ -1570,10 +1712,17 @@ export function WalkinTab({ venueId, venue }) {
         setRefreshing(false);
       }
     },
-    [buildParams]
+    [buildParams, venueId, dateFilter, searchQuery]
   );
 
+  // Skip the very first fetch on mount when cache already has data for this
+  // venue. Filter / search / date changes still trigger fresh fetches.
+  const skipWalkinMountFetchRef = useRef(!!cached);
   useEffect(() => {
+    if (skipWalkinMountFetchRef.current) {
+      skipWalkinMountFetchRef.current = false;
+      return;
+    }
     fetchPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, venueId, dateFilter]);
@@ -1740,22 +1889,32 @@ export function WalkinTab({ venueId, venue }) {
     if (loading) {
       // Spinner here (not in an early-return tree swap) — keeps the search
       // TextInput inside renderHeader mounted across keystrokes.
-      return (
-        <View style={tabStyles.initialLoad}>
-          <ActivityIndicator color={PRIMARY_COLOR} />
-        </View>
-      );
+      return <FullScreenLoader style={tabStyles.initialLoad} />;
     }
+    // Frontend differentiates filter-active vs no-bookings empty states
+    // (VenueOwnerDashboard.js:3912-3922). Mirror that here so users tapping
+    // a filter that returns nothing see the right message.
+    const filtersActive =
+      !!searchQuery?.trim() ||
+      (dateFilter?.preset && dateFilter.preset !== "all");
     return (
       <View style={{ paddingTop: 20 }}>
         <EmptyState
           icon={Users}
-          title="No walk-in bookings"
-          subtitle="Create your first walk-in to see it here."
+          title={
+            filtersActive
+              ? "No walk-in bookings match your filters"
+              : "No walk-in bookings yet"
+          }
+          subtitle={
+            filtersActive
+              ? "Try clearing or changing your filters."
+              : "Walk-in bookings created from the Slots tab will appear here."
+          }
         />
       </View>
     );
-  }, [loading]);
+  }, [loading, searchQuery, dateFilter]);
 
   // NOTE: no early-return on `loading && !bookings.length` — that would swap
   // the outer tree and unmount the search input. Spinner is shown via
@@ -1800,15 +1959,24 @@ export function WalkinTab({ venueId, venue }) {
 }
 
 // ───────────── CHECK-IN sub-tab ─────────────
+// Module-level attendance cache keyed by venueId — preserves today's bookings
+// list when toggling between scanner / attendance modes or revisiting the tab.
+const _attendanceCache = {};
+
 export function CheckinTab({ venueId, venueName }) {
   const [mode, setMode] = useState("camera"); // camera | upload | attendance
   const [scanned, setScanned] = useState(null);
+  // Raw QR string preserved alongside resolved booking — needed to call
+  // /coaching/checkin/verify on confirm (backend requires the full
+  // "HORIZON_CHECKIN:<id>:<token>" payload, not just the booking_id).
+  const [scannedQr, setScannedQr] = useState(null);
   const [resolving, setResolving] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [cameraActive, setCameraActive] = useState(false); // Web parity: user must tap to start
 
+  const cachedAttendance = _attendanceCache[venueId];
   // Attendance state
-  const [todayBookings, setTodayBookings] = useState([]);
+  const [todayBookings, setTodayBookings] = useState(cachedAttendance?.todayBookings || []);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [markingId, setMarkingId] = useState(null);
 
@@ -1816,6 +1984,7 @@ export function CheckinTab({ venueId, venueName }) {
 
   const reset = useCallback(() => {
     setScanned(null);
+    setScannedQr(null);
     setResolving(false);
     setConfirming(false);
     setCameraActive(false); // stop camera when leaving the mode
@@ -1823,7 +1992,7 @@ export function CheckinTab({ venueId, venueName }) {
 
   const loadTodayBookings = useCallback(async () => {
     if (!venueId) return;
-    setAttendanceLoading(true);
+    if (!_attendanceCache[venueId]) setAttendanceLoading(true);
     try {
       const data = await bookingService.list({
         venue_id: venueId,
@@ -1834,16 +2003,21 @@ export function CheckinTab({ venueId, venueName }) {
       });
       const list = Array.isArray(data?.bookings) ? data.bookings : [];
       setTodayBookings(list);
+      _attendanceCache[venueId] = { todayBookings: list };
     } catch {
-      setTodayBookings([]);
+      if (!_attendanceCache[venueId]) setTodayBookings([]);
     } finally {
       setAttendanceLoading(false);
     }
   }, [venueId, today]);
 
+  // Cached attendance shows instantly; only fetch when entering attendance
+  // mode for the first time per venue (no prior cache).
   useEffect(() => {
-    if (mode === "attendance") loadTodayBookings();
-  }, [mode, loadTodayBookings]);
+    if (mode !== "attendance") return;
+    if (_attendanceCache[venueId]) return;
+    loadTodayBookings();
+  }, [mode, loadTodayBookings, venueId]);
 
   const checkedIn = useMemo(
     () => todayBookings.filter((b) => b.checked_in),
@@ -1865,6 +2039,9 @@ export function CheckinTab({ venueId, venueName }) {
         toast.error("Invalid QR", "Could not read the booking code.");
         return;
       }
+      // Keep raw QR string — the verify endpoint needs the full
+      // "HORIZON_CHECKIN:<id>:<token>" payload to validate the token.
+      setScannedQr(value);
       setResolving(true);
       try {
         const booking = await bookingService.get(bookingId);
@@ -1896,37 +2073,40 @@ export function CheckinTab({ venueId, venueName }) {
     }
     setConfirming(true);
     try {
-      await bookingService.checkin({ booking_id: bookingId });
+      // Prefer the verify endpoint (works for both walk-in AND online
+      // bookings, validates the token). Fall back to manual check-in if
+      // we don't have a full QR string — only valid for walk-in bookings.
+      if (scannedQr && scannedQr.startsWith("HORIZON_CHECKIN:")) {
+        await bookingService.verifyCheckin(scannedQr);
+      } else if (scanned.booking_type === "walk_in") {
+        await bookingService.manualCheckin(bookingId);
+      } else {
+        // Online booking without a valid QR token — backend would reject.
+        throw new Error("This booking requires a valid QR scan to check in.");
+      }
       toast.success(
         "Checked in",
         scanned.customer_name || scanned.host_name || "Welcome!"
       );
       setTimeout(reset, 800);
     } catch (err) {
-      const status = err?.response?.status;
-      if (status === 404) {
-        toast.success(
-          "Check-in noted",
-          `${scanned.customer_name || scanned.host_name || "Guest"} — server log not available.`
-        );
-        setTimeout(reset, 1200);
-      } else {
-        toast.error(
-          "Check-in Failed",
-          err?.response?.data?.detail || "Try again."
-        );
-        reset();
-      }
+      toast.error(
+        "Check-in Failed",
+        err?.response?.data?.detail || err?.message || "Try again."
+      );
+      reset();
     } finally {
       setConfirming(false);
     }
-  }, [scanned, confirming, reset]);
+  }, [scanned, scannedQr, confirming, reset]);
 
   const handleMarkPresent = useCallback(async (bookingId) => {
     if (!bookingId) return;
     setMarkingId(bookingId);
     try {
-      await bookingService.checkin({ booking_id: bookingId });
+      // /coaching/checkin/manual/{id} — walk-in only, no body. Backend
+      // returns 400 for online bookings (those need QR verification).
+      await bookingService.manualCheckin(bookingId);
       toast.success("Marked as present");
       // Refresh
       await loadTodayBookings();
@@ -2049,13 +2229,18 @@ export function CheckinTab({ venueId, venueName }) {
                   )}
                 </View>
 
-                {/* Start / Stop button */}
+                {/* Start / Stop button — icon swaps to XCircle when active
+                    to mirror frontend (VenueOwnerDashboard.js:5809). */}
                 <TouchableOpacity
                   style={tabStyles.startScannerBtn}
                   onPress={() => setCameraActive((v) => !v)}
                   activeOpacity={0.85}
                 >
-                  <Camera size={14} color="#FFFFFF" strokeWidth={2.5} />
+                  {cameraActive ? (
+                    <XCircle size={14} color="#FFFFFF" strokeWidth={2.5} />
+                  ) : (
+                    <Camera size={14} color="#FFFFFF" strokeWidth={2.5} />
+                  )}
                   <Text style={tabStyles.startScannerBtnText}>
                     {cameraActive ? "Stop Camera" : "Start Camera Scanner"}
                   </Text>
@@ -2084,7 +2269,7 @@ export function CheckinTab({ venueId, venueName }) {
               <View style={{ flex: 1 }}>
                 <Text style={tabStyles.panelTitle}>Upload QR Image</Text>
                 <Text style={tabStyles.panelSubtitle}>
-                  Upload a screenshot or photo of the QR code.
+                  Upload a screenshot or photo of the Lobbian's QR code.
                 </Text>
               </View>
             </View>
@@ -2147,9 +2332,7 @@ export function CheckinTab({ venueId, venueName }) {
             ) : null}
 
             {attendanceLoading ? (
-              <View style={tabStyles.initialLoad}>
-                <ActivityIndicator color={PRIMARY_COLOR} />
-              </View>
+              <FullScreenLoader style={tabStyles.initialLoad} />
             ) : todayBookings.length === 0 ? (
               <View style={{ paddingVertical: 14 }}>
                 <EmptyState
@@ -2219,7 +2402,7 @@ export function CheckinTab({ venueId, venueName }) {
                       ) : (
                         <View style={tabStyles.awaitingPill}>
                           <Text style={tabStyles.awaitingPillText}>
-                            Awaiting QR
+                            Pending
                           </Text>
                         </View>
                       )}
@@ -2526,10 +2709,23 @@ const tabStyles = StyleSheet.create({
     fontFamily: FONTS.displayBold,
     fontWeight: "900",
     color: "#0F172A",
-    minWidth: 130,
     textAlign: "center",
   },
-  dateLabelGroup: { alignItems: "center", gap: 4 },
+  // Tap target wrapping the date text + calendar icon — sized to content,
+  // sits inline between the chevron buttons.
+  dateLabelTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 8,
+    height: 36,
+  },
+  // Row below the chevrons where the "Past — View Only" pill is rendered
+  // when viewing a past date. Centred to align with the date label above.
+  pastViewOnlyRow: {
+    alignItems: "center",
+    paddingTop: 8,
+  },
   pastViewOnlyPill: {
     paddingHorizontal: 8,
     paddingVertical: 2,

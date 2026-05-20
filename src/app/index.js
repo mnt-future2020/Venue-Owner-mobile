@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { StyleSheet, View, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAuth } from "../context/AuthContext";
+import { useAuth, useAuthLoading } from "../context/AuthContext";
 import { PRIMARY_COLOR } from "../constants/theme";
 
 const SPLASH_DURATION_MS = 2000;
@@ -11,7 +11,8 @@ const SPLASH_DURATION_MS = 2000;
 export default function Index() {
   const [showSplash, setShowSplash] = useState(true);
   const [gifLoaded, setGifLoaded] = useState(false);
-  const { user, loading, logout } = useAuth();
+  const { user, logout } = useAuth();
+  const loading = useAuthLoading();
 
   useEffect(() => {
     const preloadGif = async () => {

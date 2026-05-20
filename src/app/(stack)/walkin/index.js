@@ -16,6 +16,9 @@ import { PRIMARY_COLOR } from "../../../constants/theme";
 import venueService from "../../../services/venueService";
 import bookingService from "../../../services/bookingService";
 import toast from "../../../utils/toast";
+import useCachedResource from "../../../hooks/useCachedResource";
+import { CACHE_TTL } from "../../../services/queryCache";
+import FullScreenLoader from "../../../components/ui/FullScreenLoader";
 import SlotPicker from "../../../components/walkin/SlotPicker";
 import CustomerInfoForm from "../../../components/walkin/CustomerInfoForm";
 import ReceiptView from "../../../components/walkin/ReceiptView";
@@ -45,10 +48,25 @@ const todayStr = () => {
 export default function WalkinScreen() {
   const router = useRouter();
   const [step, setStep] = useState("slot");
-  const [venues, setVenues] = useState([]);
-  const [loadingVenues, setLoadingVenues] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [createdBooking, setCreatedBooking] = useState(null);
+
+  // Cached venues — shared key with the rest of the app. On re-entry to
+  // this screen the venue list is instant; only stale entries silently
+  // revalidate in the background.
+  const { data: venues = [], loading: loadingVenues } = useCachedResource(
+    "venue:owner-venues",
+    async () => {
+      try {
+        const list = await venueService.getOwnerVenues();
+        return Array.isArray(list) ? list : [];
+      } catch (err) {
+        toast.error("Could not load venues", err?.response?.data?.detail || "Try again.");
+        return [];
+      }
+    },
+    { ttl: CACHE_TTL.venues, revalidateOnMount: false }
+  );
 
   const [slotState, setSlotState] = useState({
     venue: null,
@@ -56,6 +74,12 @@ export default function WalkinScreen() {
     sport: "",
     slot: null,
   });
+
+  // Default the slot venue to the first cached venue once it arrives
+  useEffect(() => {
+    if (!venues || venues.length === 0) return;
+    setSlotState((prev) => (prev.venue ? prev : { ...prev, venue: venues[0] }));
+  }, [venues]);
 
   const [customer, setCustomer] = useState({
     customer_name: "",
@@ -65,30 +89,6 @@ export default function WalkinScreen() {
     advance_amount: "",
     payment_mode: "cash",
   });
-
-  // Initial venue load
-  useEffect(() => {
-    let active = true;
-    setLoadingVenues(true);
-    venueService
-      .getOwnerVenues()
-      .then((list) => {
-        if (!active) return;
-        const vs = Array.isArray(list) ? list : [];
-        setVenues(vs);
-        setSlotState((prev) => ({
-          ...prev,
-          venue: prev.venue || (vs.length ? vs[0] : null),
-        }));
-      })
-      .catch((err) =>
-        toast.error("Could not load venues", err?.response?.data?.detail || "Try again."),
-      )
-      .finally(() => active && setLoadingVenues(false));
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const stepIndex = STEP_ORDER.indexOf(step);
 
@@ -263,9 +263,7 @@ export default function WalkinScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {loadingVenues ? (
-            <View style={styles.loadingWrap}>
-              <ActivityIndicator size="large" color={PRIMARY_COLOR} />
-            </View>
+            <FullScreenLoader />
           ) : step === "slot" ? (
             <SlotPicker
               venues={venues}

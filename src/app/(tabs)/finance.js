@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   RefreshControl,
   Platform,
 } from "react-native";
@@ -36,6 +35,12 @@ import MonthlyTrendChart from "../../components/finance/MonthlyTrendChart";
 import SettlementStatusBadge from "../../components/finance/SettlementStatusBadge";
 import PayoutCard from "../../components/payout/PayoutCard";
 import Header from "../../components/Header";
+import FullScreenLoader from "../../components/ui/FullScreenLoader";
+import useCachedResource from "../../hooks/useCachedResource";
+import { CACHE_TTL } from "../../services/queryCache";
+import TabRefreshContext from "../../context/TabRefreshContext";
+import useNotificationBell from "../../hooks/useNotificationBell";
+// import SwipeTabContext from "../../context/SwipeTabContext"; // disabled with swipeable pager
 
 const fmtINR = (n) => `₹${(Number(n) || 0).toLocaleString("en-IN")}`;
 
@@ -63,57 +68,66 @@ const maskAcct = (str) => {
 };
 
 export default function FinanceScreen() {
+  // Swipeable pager guard — commented out while plain Tabs is in use.
+  // const { inPager } = useContext(SwipeTabContext);
+  // if (!inPager) return null;
+
   const router = useRouter();
+  const { refreshSignals } = useContext(TabRefreshContext);
+  const { bellAction } = useNotificationBell();
+  const scrollRef = useRef(null);
 
   // --- Overview state
-  const [summary, setSummary] = useState(null);
   const [dateFilter, setDateFilter] = useState({ preset: "all" });
-  const [venues, setVenues] = useState([]);
   const [selectedVenueId, setSelectedVenueId] = useState("all"); // "all" or venue id
-
-  // --- Payouts state
-  const [payoutSummary, setPayoutSummary] = useState(null);
-  const [linkedAccount, setLinkedAccount] = useState(null);
-  const [myPayouts, setMyPayouts] = useState([]);
-  const [payoutsLoaded, setPayoutsLoaded] = useState(false);
-
-  // --- UI state
   const [activeTab, setActiveTab] = useState("overview"); // "overview" | "payouts"
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
 
-  // ── Loaders ──────────────────────────────────────────────────────────────
-  const loadSummary = useCallback(async (filter, venueId) => {
-    const params = {};
-    if (filter?.start_date) params.start_date = filter.start_date;
-    if (filter?.end_date) params.end_date = filter.end_date;
-    if (venueId && venueId !== "all") params.venue_id = venueId;
-    try {
-      const data = await analyticsService.getFinanceSummary(params);
-      setSummary(data);
-    } catch (err) {
-      toast.error("Failed", err?.response?.data?.detail || "Could not load finance summary.");
-    }
-  }, []);
-
-  const loadVenues = useCallback(async () => {
-    try {
+  // ── Cached venues (shared with dashboard/venues screens) ────────────────
+  const { data: venues = [] } = useCachedResource(
+    "venue:owner-venues",
+    async () => {
       const list = await venueService.getOwnerVenues();
-      setVenues(Array.isArray(list) ? list : []);
-    } catch {
-      setVenues([]);
-    }
-  }, []);
+      return Array.isArray(list) ? list : [];
+    },
+    { ttl: CACHE_TTL.venues, revalidateOnMount: false }
+  );
 
-  const loadPayouts = useCallback(async () => {
-    try {
+  // ── Cached finance summary (keyed by venue + date range) ────────────────
+  const summaryKey = `finance:summary:${selectedVenueId || "all"}:${dateFilter?.start_date || ""}:${dateFilter?.end_date || ""}`;
+  const {
+    data: summary,
+    loading: summaryLoading,
+    refresh: refreshSummary,
+  } = useCachedResource(
+    summaryKey,
+    async () => {
+      const params = {};
+      if (dateFilter?.start_date) params.start_date = dateFilter.start_date;
+      if (dateFilter?.end_date) params.end_date = dateFilter.end_date;
+      if (selectedVenueId && selectedVenueId !== "all") params.venue_id = selectedVenueId;
+      try {
+        return await analyticsService.getFinanceSummary(params);
+      } catch (err) {
+        toast.error("Failed", err?.response?.data?.detail || "Could not load finance summary.");
+        return null;
+      }
+    },
+    { ttl: CACHE_TTL.dashboard, revalidateOnMount: false }
+  );
+
+  // ── Cached payouts bundle ───────────────────────────────────────────────
+  const {
+    data: payoutsBundle,
+    loading: payoutsLoading,
+    refresh: refreshPayouts,
+  } = useCachedResource(
+    "finance:payouts",
+    async () => {
       const [psum, linked, list] = await Promise.all([
         payoutService.getMySummary().catch(() => null),
         payoutService.getLinkedAccount().catch(() => null),
         payoutService.getMyPayouts({ page: 1, limit: 20 }).catch(() => null),
       ]);
-      setPayoutSummary(psum || null);
-      setLinkedAccount(linked && linked.linked === false ? null : linked || null);
       const payouts = Array.isArray(list)
         ? list
         : Array.isArray(list?.settlements)
@@ -121,49 +135,43 @@ export default function FinanceScreen() {
         : Array.isArray(list?.payouts)
         ? list.payouts
         : [];
-      setMyPayouts(payouts);
-      setPayoutsLoaded(true);
-    } catch (err) {
-      toast.error("Failed", err?.response?.data?.detail || "Could not load payouts.");
-    }
-  }, []);
+      return {
+        payoutSummary: psum || null,
+        linkedAccount: linked && linked.linked === false ? null : linked || null,
+        myPayouts: payouts,
+      };
+    },
+    { ttl: CACHE_TTL.dashboard, revalidateOnMount: false }
+  );
 
-  // ── Initial load ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      await Promise.all([loadVenues(), loadSummary({ preset: "all" }, "all"), loadPayouts()]);
-      setLoading(false);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const payoutSummary = payoutsBundle?.payoutSummary || null;
+  const linkedAccount = payoutsBundle?.linkedAccount || null;
+  const myPayouts = payoutsBundle?.myPayouts || [];
+
+  // Initial paint requires either cached data or a finished first fetch
+  const loading = summaryLoading && summary === undefined;
+  const refreshing = (summaryLoading && summary !== undefined) || (payoutsLoading && payoutsBundle !== undefined);
 
   // ── Refresh ──────────────────────────────────────────────────────────────
-  const onRefresh = async () => {
-    setRefreshing(true);
+  const onRefresh = useCallback(() => {
     if (activeTab === "overview") {
-      await loadSummary(dateFilter, selectedVenueId);
+      refreshSummary().catch(() => {});
     } else {
-      await loadPayouts();
+      refreshPayouts().catch(() => {});
     }
-    setRefreshing(false);
-  };
+  }, [activeTab, refreshSummary, refreshPayouts]);
+
+  // Same-tab tap → scroll top + refresh
+  useEffect(() => {
+    if (!refreshSignals.finance) return;
+    scrollRef.current?.scrollTo?.({ y: 0, animated: true });
+    onRefresh();
+  }, [refreshSignals.finance]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
-  const handleDateChange = async (filter) => {
-    setDateFilter(filter || { preset: "all" });
-    await loadSummary(filter, selectedVenueId);
-  };
-
-  const handleVenueChange = async (vid) => {
-    setSelectedVenueId(vid);
-    await loadSummary(dateFilter, vid);
-  };
-
-  const handleTabChange = (tab) => {
-    setActiveTab(tab);
-    if (tab === "payouts" && !payoutsLoaded) loadPayouts();
-  };
+  const handleDateChange = (filter) => setDateFilter(filter || { preset: "all" });
+  const handleVenueChange = (vid) => setSelectedVenueId(vid);
+  const handleTabChange = (tab) => setActiveTab(tab);
 
   const handleLinkBank = () => router.push("/(stack)/finance/link-bank");
 
@@ -171,10 +179,14 @@ export default function FinanceScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={[]}>
-        <Header title="Finance" subtitle="Revenue, expenses, invoices & payouts" />
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={PRIMARY_COLOR} />
-        </View>
+      <Header
+        logo
+        showLocation
+        actions={[
+          bellAction,
+        ]}
+      />
+        <FullScreenLoader />
       </SafeAreaView>
     );
   }
@@ -189,8 +201,15 @@ export default function FinanceScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={[]}>
-      <Header title="Finance" subtitle="Revenue, expenses, invoices & payouts" />
+      <Header
+        logo
+        showLocation
+        actions={[
+          bellAction,
+        ]}
+      />
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         refreshControl={

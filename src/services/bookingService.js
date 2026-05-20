@@ -49,10 +49,38 @@ const bookingService = {
     return res.data || {};
   },
 
-  // Check-in by booking_id or 8-char checkin_token (backend endpoint may not exist yet)
-  checkin: async (data) => {
-    const res = await api.post("/bookings/checkin", data);
+  // Verify a check-in QR — POST /coaching/checkin/verify with raw QR
+  // string (format: "HORIZON_CHECKIN:<booking_id>:<token>"). Works for
+  // both walk-in AND online bookings. Backend validates the token.
+  verifyCheckin: async (qrData) => {
+    const res = await api.post("/coaching/checkin/verify", { qr_data: qrData });
     return res.data || {};
+  },
+
+  // Manually mark a walk-in booking as present (venue owner only).
+  // POST /coaching/checkin/manual/{booking_id} — no body. Backend rejects
+  // online bookings (400) since they require QR verification.
+  manualCheckin: async (bookingId) => {
+    const res = await api.post(`/coaching/checkin/manual/${bookingId}`);
+    return res.data || {};
+  },
+
+  // DEPRECATED — kept as backwards-compat alias for old screens. The real
+  // endpoint `/bookings/checkin` does not exist on backend; this previously
+  // returned 404 silently. New code should use verifyCheckin / manualCheckin.
+  checkin: async (data) => {
+    if (data?.booking_id) {
+      const res = await api.post(
+        `/coaching/checkin/manual/${data.booking_id}`
+      );
+      return res.data || {};
+    }
+    if (data?.qr_data || data?.checkin_token) {
+      const qr = data.qr_data || data.checkin_token;
+      const res = await api.post("/coaching/checkin/verify", { qr_data: qr });
+      return res.data || {};
+    }
+    throw new Error("checkin: provide booking_id or qr_data");
   },
 
   // Backwards-compat alias

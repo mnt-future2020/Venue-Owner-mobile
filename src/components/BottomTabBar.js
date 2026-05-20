@@ -1,8 +1,9 @@
-import React, { memo, useCallback, useEffect, useMemo } from "react";
-import { Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { memo, useCallback, useContext, useEffect, useMemo } from "react";
+import { Dimensions, Platform, StyleSheet, TouchableOpacity, View } from "react-native";
 import Animated, {
   interpolate,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
@@ -10,6 +11,7 @@ import Svg, { Path } from "react-native-svg";
 import { LayoutDashboard, ClipboardList, Wallet, User } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PRIMARY_COLOR, FONTS } from "../constants/theme";
+import TabRefreshContext from "../context/TabRefreshContext";
 
 // === Sizing
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -32,7 +34,7 @@ const ACCENT = PRIMARY_COLOR;
 
 const SPRING_CONFIG = { damping: 18, stiffness: 210, mass: 0.78 };
 
-// === SVG path helpers (cut into top edge of bar)
+// === SVG path helpers
 function createNotchPath(width) {
   const baselineY = NOTCH_HEIGHT;
   const centerX = width / 2;
@@ -64,7 +66,6 @@ function createNotchStroke(width) {
   ].join(" ");
 }
 
-// === Owner tabs (icons match web sidebar exactly)
 const TABS = [
   { name: "dashboard", label: "Dashboard", Icon: LayoutDashboard },
   { name: "venues", label: "Venue Mgmt", Icon: ClipboardList },
@@ -72,12 +73,10 @@ const TABS = [
   { name: "profile", label: "Profile", Icon: User },
 ];
 
-// === Sub-components
 const TabItem = memo(function TabItem({ tab, index, onPress, progress, activeIndex }) {
   const iconAnimStyle = useAnimatedStyle(() => {
     if (activeIndex < 0) return { opacity: 1 };
     const dist = Math.abs(progress.value - index);
-    // Fade out base icon when the floating circle is on this tab
     const opacity = interpolate(dist, [0, 0.5], [0.18, 1], "clamp");
     return { opacity };
   });
@@ -147,41 +146,68 @@ const FloatingActive = memo(function FloatingActive({ progress, activeIndex }) {
   );
 });
 
-// === Main bar (expo-router Tabs compatible)
-export default function BottomTabBar({ state, descriptors, navigation }) {
+/**
+ * BottomTabBar — supports two modes:
+ *  1. Pager mode: pass `activeIndex`, `onTabPress`, and optional `pagerTranslateX`
+ *     (SharedValue from a horizontal pager). When pagerTranslateX is supplied,
+ *     the notch + floating circle follow the finger continuously.
+ *  2. expo-router mode: pass the standard `{ state, descriptors, navigation }`
+ *     props from `Tabs tabBar={...}`.
+ */
+export default function BottomTabBar({
+  // Pager mode
+  activeIndex: activeIndexProp,
+  onTabPress,
+  pagerTranslateX,
+  // expo-router mode
+  state,
+  navigation,
+}) {
   const insets = useSafeAreaInsets();
-  const progress = useSharedValue(0);
+  const fallbackProgress = useSharedValue(0);
+  const { triggerRefresh } = useContext(TabRefreshContext);
 
-  // Map expo-router state.routes to our TABS order
   const tabOrder = useMemo(() => state?.routes?.map((r) => r.name) || [], [state]);
-  const activeIndex = useMemo(() => {
-    if (!state) return 0;
-    const focusedName = state.routes[state.index]?.name;
-    return TABS.findIndex((t) => t.name === focusedName);
-  }, [state]);
+
+  const resolvedActiveIndex = useMemo(() => {
+    if (typeof activeIndexProp === "number") return activeIndexProp;
+    if (state) {
+      const focusedName = state.routes[state.index]?.name;
+      return TABS.findIndex((t) => t.name === focusedName);
+    }
+    return 0;
+  }, [activeIndexProp, state]);
+
+  // Derived progress — follows pagerTranslateX if provided, else springs to activeIndex
+  const progress = useDerivedValue(() => {
+    if (pagerTranslateX) {
+      return -pagerTranslateX.value / BAR_WIDTH;
+    }
+    return fallbackProgress.value;
+  }, [pagerTranslateX]);
 
   useEffect(() => {
-    if (activeIndex >= 0) {
-      progress.value = withSpring(activeIndex, SPRING_CONFIG);
+    if (!pagerTranslateX && resolvedActiveIndex >= 0) {
+      fallbackProgress.value = withSpring(resolvedActiveIndex, SPRING_CONFIG);
     }
-  }, [activeIndex, progress]);
+  }, [resolvedActiveIndex, pagerTranslateX, fallbackProgress]);
 
   const notchWrapStyle = useAnimatedStyle(() => {
     const centerX = TAB_WIDTH * (progress.value + 0.5);
     return {
       transform: [{ translateX: centerX - NOTCH_HALF_WIDTH }],
-      opacity: activeIndex >= 0 ? 1 : 0,
+      opacity: resolvedActiveIndex >= 0 ? 1 : 0,
     };
   });
 
   const topLineLeftStyle = useAnimatedStyle(() => {
-    if (activeIndex < 0) return { width: BAR_WIDTH };
+    if (resolvedActiveIndex < 0) return { width: BAR_WIDTH };
     const centerX = TAB_WIDTH * (progress.value + 0.5);
     return { width: Math.max(0, centerX - NOTCH_HALF_WIDTH) };
   });
 
   const topLineRightStyle = useAnimatedStyle(() => {
-    if (activeIndex < 0) return { left: BAR_WIDTH, width: 0 };
+    if (resolvedActiveIndex < 0) return { left: BAR_WIDTH, width: 0 };
     const centerX = TAB_WIDTH * (progress.value + 0.5);
     const left = centerX + NOTCH_HALF_WIDTH;
     return { left, width: Math.max(0, BAR_WIDTH - left) };
@@ -190,26 +216,34 @@ export default function BottomTabBar({ state, descriptors, navigation }) {
   const handlePress = useCallback(
     (tabIndex) => {
       const tabName = TABS[tabIndex]?.name;
-      if (!tabName) return;
+      const isCurrent = tabIndex === resolvedActiveIndex;
 
-      // Find the matching route in expo-router state and emit press
+      // Same-tab tap → signal the active screen to scroll-top + refresh
+      if (isCurrent && tabName) {
+        triggerRefresh(tabName);
+        return;
+      }
+
+      if (onTabPress) {
+        onTabPress(tabIndex);
+        return;
+      }
+      // expo-router fallback
+      if (!tabName || !state || !navigation) return;
       const routeIndex = tabOrder.indexOf(tabName);
       if (routeIndex < 0) return;
-
       const route = state.routes[routeIndex];
       const isFocused = routeIndex === state.index;
-
       const event = navigation.emit({
         type: "tabPress",
         target: route.key,
         canPreventDefault: true,
       });
-
       if (!isFocused && !event.defaultPrevented) {
         navigation.navigate(route.name);
       }
     },
-    [navigation, state, tabOrder]
+    [onTabPress, navigation, state, tabOrder, resolvedActiveIndex, triggerRefresh],
   );
 
   const bottomPad = Platform.select({
@@ -231,7 +265,7 @@ export default function BottomTabBar({ state, descriptors, navigation }) {
           </Svg>
         </Animated.View>
 
-        <FloatingActive progress={progress} activeIndex={activeIndex} />
+        <FloatingActive progress={progress} activeIndex={resolvedActiveIndex} />
 
         <View style={styles.tabRow}>
           {TABS.map((tab, index) => (
@@ -241,7 +275,7 @@ export default function BottomTabBar({ state, descriptors, navigation }) {
               index={index}
               onPress={handlePress}
               progress={progress}
-              activeIndex={activeIndex}
+              activeIndex={resolvedActiveIndex}
             />
           ))}
         </View>

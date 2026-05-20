@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Dimensions,
   FlatList,
@@ -49,13 +49,29 @@ export default function CalendarPicker({
   onChange,
   minDate,
   required = false,
+  // Controlled / headless mode — caller renders its own trigger and toggles
+  // visibility via `visible` + `onClose`. When `controlled` is true the
+  // built-in trigger button is NOT rendered.
+  controlled = false,
+  visible: controlledVisible,
+  onClose,
 }) {
-  const [visible, setVisible] = useState(false);
+  const [internalVisible, setInternalVisible] = useState(false);
+  const visible = controlled ? !!controlledVisible : internalVisible;
+  const setVisible = (v) => {
+    if (controlled) {
+      if (!v) onClose?.();
+    } else {
+      setInternalVisible(v);
+    }
+  };
   const [yearPickerOpen, setYearPickerOpen] = useState(false);
 
   const today = new Date();
   const todayStr = toDateStr(today.getFullYear(), today.getMonth(), today.getDate());
-  const min = minDate != null ? minDate : todayStr;
+  // `minDate === null` means "no minimum" — allows selecting past dates.
+  // `minDate === undefined` falls back to today (default behaviour).
+  const min = minDate === null ? null : minDate != null ? minDate : todayStr;
 
   const initialMonth = value
     ? { year: parseInt(value.split("-")[0]), month: parseInt(value.split("-")[1]) - 1 }
@@ -100,7 +116,7 @@ export default function CalendarPicker({
 
   const handleSelect = (day) => {
     const dateStr = toDateStr(viewYear, viewMonth, day);
-    if (dateStr < min) return;
+    if (min !== null && dateStr < min) return;
     onChange?.(dateStr);
     setVisible(false);
     setYearPickerOpen(false);
@@ -116,31 +132,47 @@ export default function CalendarPicker({
     setYearPickerOpen(false);
   };
 
+  // When `controlled`, parent renders its own trigger and toggles `visible`.
+  // We sync the calendar view to the new value whenever the modal opens.
+  useEffect(() => {
+    if (controlled && controlledVisible && value) {
+      setViewYear(parseInt(value.split("-")[0]));
+      setViewMonth(parseInt(value.split("-")[1]) - 1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [controlled, controlledVisible]);
+
   return (
     <>
-      {label ? (
-        <Text style={styles.label}>
-          {label}
-          {required ? " *" : ""}
-        </Text>
+      {!controlled ? (
+        <>
+          {label ? (
+            <Text style={styles.label}>
+              {label}
+              {required ? " *" : ""}
+            </Text>
+          ) : null}
+          <TouchableOpacity
+            style={styles.trigger}
+            activeOpacity={0.8}
+            onPress={() => {
+              if (value) {
+                setViewYear(parseInt(value.split("-")[0]));
+                setViewMonth(parseInt(value.split("-")[1]) - 1);
+              }
+              setYearPickerOpen(false);
+              setVisible(true);
+            }}
+          >
+            <Calendar size={16} color="#64748B" />
+            <Text
+              style={[styles.triggerText, !value && styles.triggerPlaceholder]}
+            >
+              {value ? formatDisplay(value) : "Select date"}
+            </Text>
+          </TouchableOpacity>
+        </>
       ) : null}
-      <TouchableOpacity
-        style={styles.trigger}
-        activeOpacity={0.8}
-        onPress={() => {
-          if (value) {
-            setViewYear(parseInt(value.split("-")[0]));
-            setViewMonth(parseInt(value.split("-")[1]) - 1);
-          }
-          setYearPickerOpen(false);
-          setVisible(true);
-        }}
-      >
-        <Calendar size={16} color="#64748B" />
-        <Text style={[styles.triggerText, !value && styles.triggerPlaceholder]}>
-          {value ? formatDisplay(value) : "Select date"}
-        </Text>
-      </TouchableOpacity>
 
       <Modal
         visible={visible}
@@ -239,7 +271,7 @@ export default function CalendarPicker({
                       return <View key={`e-${idx}`} style={styles.cell} />;
                     }
                     const dateStr = toDateStr(viewYear, viewMonth, day);
-                    const isPast = dateStr < min;
+                    const isPast = min !== null && dateStr < min;
                     const isToday = dateStr === todayStr;
                     const isSelected = dateStr === value;
 

@@ -115,7 +115,7 @@ export default function HoldRuleForm({
     }));
 
   const validate = () => {
-    if (!form.name.trim()) return "Rule name is required";
+    if (!form.name.trim()) return "Name is required";
     if (form.schedule_type === "weekly" && form.days_of_week.length === 0)
       return "Select at least one day";
     if (
@@ -152,6 +152,9 @@ export default function HoldRuleForm({
       onRequestClose={onClose}
     >
       <View style={styles.backdrop}>
+        {/* Absolute-positioned tap-to-dismiss layer — does NOT consume
+            flex space (previous version used flex:1 which starved the
+            sheet of height, making the modal appear empty). */}
         <Pressable style={styles.backdropTap} onPress={onClose} />
         <View style={styles.sheet}>
           {/* Header */}
@@ -171,7 +174,6 @@ export default function HoldRuleForm({
           </View>
 
           <ScrollView
-            style={{ flex: 1 }}
             contentContainerStyle={styles.body}
             keyboardShouldPersistTaps="handled"
           >
@@ -181,7 +183,7 @@ export default function HoldRuleForm({
               <TextInput
                 value={form.name}
                 onChangeText={(v) => setField("name", v)}
-                placeholder="e.g. School Academy Cricket"
+                placeholder="e.g. XYZ School Cricket"
                 placeholderTextColor="#9CA3AF"
                 style={styles.input}
               />
@@ -201,7 +203,7 @@ export default function HoldRuleForm({
 
             {/* Turfs */}
             <View style={styles.field}>
-              <Text style={styles.label}>Turfs (empty = all)</Text>
+              <Text style={styles.label}>Turfs (leave empty for all)</Text>
               <View style={styles.chipRow}>
                 {turfOptions.map((t) => {
                   const on = form.turf_numbers.includes(t.number);
@@ -391,7 +393,7 @@ export default function HoldRuleForm({
               activeOpacity={0.8}
             >
               <Text style={styles.saveBtnText}>
-                {saving ? "Saving…" : initial?.id ? "Update" : "Create"}
+                {saving ? "Saving..." : initial?.id ? "Update" : "Create"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -438,8 +440,16 @@ export default function HoldRuleForm({
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.5)" },
-  backdropTap: { flex: 1 },
+  // Bottom-sheet layout: backdrop is a full-screen column that anchors the
+  // sheet to the bottom via justifyContent. backdropTap is absolutely
+  // positioned BEHIND the sheet so it covers the un-blocked area without
+  // consuming flex height (the old `flex: 1` here squeezed the sheet to 0).
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.5)",
+    justifyContent: "flex-end",
+  },
+  backdropTap: { ...StyleSheet.absoluteFillObject },
   sheet: {
     backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 24,

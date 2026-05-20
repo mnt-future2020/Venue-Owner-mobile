@@ -1,8 +1,8 @@
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { CalendarDays, Clock, ChevronRight } from "lucide-react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { PRIMARY_COLOR, FONTS } from "../../constants/theme";
-import { getSportIconName } from "../../utils/sportIcons";
+import { getSportIconName } from "../../constants/venueConstants";
 
 // ── helpers ─────────────────────────────────────────────────────────
 function fmt12h(hhmm) {
@@ -89,6 +89,22 @@ function netAmount(b) {
   return total - commission - gst;
 }
 
+// Mirror of frontend Cashfree transfer_status outline pill
+// (VenueOwnerDashboard.js:1728-1743). Rendered only when
+// `booking.cashfree_transfer_id` is present.
+const TRANSFER_STATUS_CONFIG = {
+  on_hold: { label: "On Hold", fg: "#0EA5E9", border: "rgba(14, 165, 233, 0.30)" },
+  released: { label: "Released", fg: "#10B981", border: "rgba(16, 185, 129, 0.30)" },
+  settled: { label: "Settled", fg: "#059669", border: "rgba(5, 150, 105, 0.30)" },
+  reversed: { label: "Reversed", fg: "#EF4444", border: "rgba(239, 68, 68, 0.30)" },
+};
+
+function getTransferPill(b) {
+  if (!b?.cashfree_transfer_id) return null;
+  const fallback = { label: "Pending", fg: "#6B7280", border: "rgba(107, 114, 128, 0.30)" };
+  return TRANSFER_STATUS_CONFIG[b.transfer_status] || fallback;
+}
+
 export default function BookingRow({ booking, onPress }) {
   if (!booking) return null;
 
@@ -105,6 +121,7 @@ export default function BookingRow({ booking, onPress }) {
       : booking.venue_name || "";
 
   const sc = STATUS_CONFIG[booking.status] || STATUS_CONFIG.pending;
+  const transferPill = getTransferPill(booking);
 
   const sportIcon = booking.sport
     ? getSportIconName(String(booking.sport).toLowerCase())
@@ -147,6 +164,20 @@ export default function BookingRow({ booking, onPress }) {
               {sc.label}
             </Text>
           </View>
+          {transferPill ? (
+            <View
+              style={[
+                styles.transferPill,
+                { borderColor: transferPill.border },
+              ]}
+            >
+              <Text
+                style={[styles.transferPillText, { color: transferPill.fg }]}
+              >
+                {transferPill.label}
+              </Text>
+            </View>
+          ) : null}
           <ChevronRight size={16} color="#9CA3AF" />
         </View>
       </View>
@@ -171,7 +202,11 @@ export default function BookingRow({ booking, onPress }) {
           {booking.sport ? (
             <View style={styles.metaItem}>
               {sportIcon ? (
-                <Ionicons name={sportIcon} size={12} color="#6B7280" />
+                <MaterialCommunityIcons
+                  name={sportIcon}
+                  size={12}
+                  color="#6B7280"
+                />
               ) : null}
               <Text style={styles.metaText}>{titleCase(booking.sport)}</Text>
             </View>
@@ -252,6 +287,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(245, 158, 11, 0.30)",
     backgroundColor: "transparent",
+  },
+
+  // Cashfree transfer_status outline pill — only when cashfree_transfer_id
+  transferPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 9999,
+    borderWidth: 1,
+    backgroundColor: "transparent",
+  },
+  transferPillText: {
+    fontSize: 10,
+    fontFamily: FONTS.bodyExtraBold,
+    fontWeight: "800",
+    letterSpacing: 0.3,
   },
   walkinPillText: {
     fontSize: 10,

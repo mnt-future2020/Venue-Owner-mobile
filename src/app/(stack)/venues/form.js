@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import queryCache from "../../../services/queryCache";
+import FullScreenLoader from "../../../components/ui/FullScreenLoader";
 import {
   View,
   Text,
@@ -97,12 +99,35 @@ export default function VenueFormScreen() {
   const isEdit = !!id;
   const insets = useSafeAreaInsets();
 
-  const [form, setForm] = useState(DEFAULT_FORM);
+  // Seed from owner-venues cache when possible so reopening edit avoids the
+  // spinner entirely. Falls back to the network fetch below if missing.
+  const cachedVenue = useMemo(() => {
+    if (!isEdit) return null;
+    const list = queryCache.getData("venue:owner-venues");
+    if (!Array.isArray(list)) return null;
+    return list.find((v) => v.id === id) || null;
+  }, [id, isEdit]);
+
+  const [form, setForm] = useState(() =>
+    cachedVenue ? { ...DEFAULT_FORM, ...cachedVenue } : DEFAULT_FORM
+  );
   const [errors, setErrors] = useState({});
-  const [baseTurf, setBaseTurf] = useState({ sport: null, idx: 0 });
-  const [loading, setLoading] = useState(isEdit);
+  const [baseTurf, setBaseTurf] = useState(() => {
+    if (!cachedVenue) return { sport: null, idx: 0 };
+    const cfg = cachedVenue.turf_config || [];
+    for (const tc of cfg) {
+      for (let i = 0; i < (tc.turfs || []).length; i++) {
+        if (tc.turfs[i].price === cachedVenue.base_price) {
+          return { sport: tc.sport, idx: i };
+        }
+      }
+    }
+    return { sport: cfg[0]?.sport, idx: 0 };
+  });
+  // Skip the initial spinner when we already have cached data for this venue.
+  const [loading, setLoading] = useState(isEdit && !cachedVenue);
   const [submitting, setSubmitting] = useState(false);
-  const seededRef = useRef(false);
+  const seededRef = useRef(!!cachedVenue);
 
   // Extract iframe src
   const extractMapUrl = (raw) => {
@@ -237,9 +262,7 @@ export default function VenueFormScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={PRIMARY_COLOR} />
-        </View>
+        <FullScreenLoader />
       </SafeAreaView>
     );
   }
