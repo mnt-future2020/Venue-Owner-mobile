@@ -8,7 +8,7 @@
     "userInterfaceStyle": "light",
     "scheme": "venue-lobbi",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/splashscreen.gif",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },

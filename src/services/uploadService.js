@@ -113,6 +113,7 @@ const uploadService = {
   uploadImage: async (asset) => uploadSingle("/upload/image", asset, "image/jpeg"),
   uploadImages: async (assets = []) => Promise.all(assets.map((asset) => uploadSingle("/upload/image", asset, "image/jpeg"))),
   uploadVideo: async (asset) => uploadSingle("/upload/video", asset, "video/mp4"),
+  uploadDocument: async (asset) => uploadSingle("/upload/document", asset, "application/pdf"),
 };
 
 export default uploadService;

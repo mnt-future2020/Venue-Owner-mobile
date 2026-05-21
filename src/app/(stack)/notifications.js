@@ -9,6 +9,7 @@ import {
   TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import {
   BellOff,
@@ -152,6 +153,7 @@ function NotificationRow({ item, onPress, onMarkRead }) {
 }
 
 export default function NotificationsScreen() {
+  const router = useRouter();
   const [filter, setFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState("newest"); // newest | oldest
   const [search, setSearch] = useState("");
@@ -315,12 +317,34 @@ export default function NotificationsScreen() {
     }
   }, [unreadCount]);
 
+  // Dispatch the per-type tap target. Mark-as-read fires regardless so the
+  // bell badge updates immediately. Unknown types fall through silently.
   const handlePress = useCallback(
     (item) => {
       if (!item.is_read) handleMarkRead(item.id);
-      // TODO: route by type (booking → /(stack)/venues with id, etc.)
+      const venueId = item?.venue_id || item?.data?.venue_id;
+      switch (item?.type) {
+        case "booking":
+        case "booking_confirmed":
+        case "game_completed":
+          if (venueId) {
+            router.push({ pathname: "/(tabs)/venues", params: { venue: venueId } });
+          } else {
+            router.push("/(tabs)/venues");
+          }
+          break;
+        case "slot_available":
+          router.push({
+            pathname: "/(tabs)/venues",
+            params: venueId ? { venue: venueId, tab: "slots" } : { tab: "slots" },
+          });
+          break;
+        default:
+          // No navigation for unrecognised types — mark-as-read is enough.
+          break;
+      }
     },
-    [handleMarkRead]
+    [handleMarkRead, router]
   );
 
   const keyExtractor = useCallback((item, index) => {
