@@ -23,6 +23,10 @@ const authService = {
     const res = await api.put("/auth/profile", data);
     return res.data;
   },
+  updateVerificationDocuments: async (payload) => {
+    const res = await api.put("/auth/verification-documents", payload);
+    return res.data;
+  },
   changePassword: async (currentPassword, newPassword) => {
     const res = await api.put("/auth/change-password", { current_password: currentPassword, new_password: newPassword });
     return res.data;

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { User, Settings as SettingsIcon, LogOut } from "lucide-react-native";
 import { usePathname, useRouter } from "expo-router";
@@ -12,6 +13,7 @@ import { PRIMARY_COLOR, FONTS } from "../constants/theme";
 import { useAuth } from "../context/AuthContext";
 import { useLocation } from "../context/LocationContext";
 import { safePush } from "../services/navigationGuard";
+import { mediaUrl } from "../utils/media";
 
 // Owner tab routes — back button auto-hides on these, hamburger shows instead
 const TAB_ROUTES = new Set([
@@ -161,9 +163,21 @@ export default function Header({
             style={styles.profileShortcut}
             activeOpacity={0.85}
           >
-            <View style={[styles.profileAvatar, styles.profileAvatarFallback]}>
-              <Text style={styles.profileAvatarText}>{initials}</Text>
-            </View>
+            {/* Real-time avatar: AuthContext.updateUser({ avatar }) after
+                upload propagates here instantly via useAuth(). Falls back
+                to the initials chip when no avatar is set. */}
+            {user?.avatar ? (
+              <Image
+                source={{ uri: mediaUrl(user.avatar) }}
+                style={styles.profileAvatar}
+                contentFit="cover"
+                transition={120}
+              />
+            ) : (
+              <View style={[styles.profileAvatar, styles.profileAvatarFallback]}>
+                <Text style={styles.profileAvatarText}>{initials}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -211,6 +225,7 @@ export default function Header({
               activeOpacity={0.7}
               onPress={() => {
                 setShowProfileMenu(false);
+                safePush(router, "/(stack)/settings");
               }}
             >
               <SettingsIcon size={18} color="#475569" strokeWidth={2} />
