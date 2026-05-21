@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
 import { Building2 } from "lucide-react-native";
 import AuthScreen from "../../components/ui/AuthScreen";
+import Logo from "../../components/Logo";
 import AuthInput from "../../components/auth/AuthInput";
 import PasswordField from "../../components/auth/PasswordField";
 import AuthButton from "../../components/auth/AuthButton";
+import AuthLink from "../../components/auth/AuthLink";
 import toast from "../../utils/toast";
 import { useAuth } from "../../context/AuthContext";
 import { PRIMARY_COLOR } from "../../constants/theme";
@@ -99,7 +101,7 @@ export default function LoginScreen() {
     <AuthScreen>
       {/* Logo */}
       <View style={styles.logoWrap}>
-        <Image source={require("../../../assets/logo.png")} style={styles.logo} resizeMode="contain" />
+        <Logo size={36} />
       </View>
 
       {/* Title */}
@@ -140,6 +142,11 @@ export default function LoginScreen() {
         >
           <Text style={styles.forgotText}>Forgot Password?</Text>
         </TouchableOpacity>
+        {/* <AuthLink
+          text="Don't have an account?"
+          linkText="Create Account"
+          onPress={() => safePush(router, "/(auth)/register")}
+        /> */}
       </View>
 
       {/* Dev quick-login (dev mode only) */}
