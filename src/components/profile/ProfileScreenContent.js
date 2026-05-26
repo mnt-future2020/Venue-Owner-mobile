@@ -32,6 +32,8 @@ import {
   Flame,
   Shield,
   Award,
+  FileText,
+  ChevronDown,
   BadgeCheck,
   BarChart3,
   CalendarDays,
@@ -68,6 +70,12 @@ import socialService from "../../services/socialService";
 import engagementService from "../../services/engagementService";
 import authService from "../../services/authService";
 import venueService from "../../services/venueService";
+import useCachedResource from "../../hooks/useCachedResource";
+import { CACHE_TTL } from "../../services/queryCache";
+import DocumentsUploadTab from "./DocumentsUploadTab";
+import OwnerVenuesList from "./OwnerVenuesList";
+import OwnerReviewsList from "./OwnerReviewsList";
+import VerificationBanner from "./VerificationBanner";
 import { safePush } from "../../services/navigationGuard";
 import { useAuth } from "../../context/AuthContext";
 import { mediaUrl } from "../../utils/media";
@@ -84,6 +92,9 @@ const BASE_TABS = [
 ];
 const BOOKINGS_TAB = { key: "bookings", label: "Bookings", IconComponent: Calendar };
 const BADGES_TAB = { key: "badges", label: "Badges", IconComponent: Award };
+const DOCS_TAB = { key: "documents", label: "Docs", IconComponent: FileText };
+const VENUES_TAB = { key: "venues", label: "Venues", IconComponent: Building2 };
+const REVIEWS_TAB = { key: "reviews", label: "Reviews", IconComponent: Star };
 const FINANCE_TAB = { key: "finance", label: "Finance", IconComponent: TrendingUp };
 const BOOKING_PAGE_SIZE = 10;
 
@@ -360,11 +371,106 @@ export default function ProfileScreenContent() {
     }
     tabs.push(BADGES_TAB);
     if (isOwnProfile && user?.role === "venue_owner") {
-      tabs.push(FINANCE_TAB);
+      // Match frontend PROFILE_TABS.venue_owner: Badges + Docs + Venues + Reviews
+      // (no Finance — that's a Lobbi mobile addition outside frontend parity).
+      tabs.push(DOCS_TAB, VENUES_TAB, REVIEWS_TAB);
     }
     return tabs;
   }, [isOwnProfile, user?.role]);
-  const tabWidth = useMemo(() => (SCREEN_WIDTH - 32) / Math.max(TABS.length, 1), [TABS.length]);
+  const isVenueOwner = user?.role === "venue_owner";
+
+  // venue_owner Docs/Venues/Reviews data — frontend parity (PROFILE_TABS.venue_owner).
+  const { data: ownerVenues = [] } = useCachedResource(
+    "venue:owner-venues",
+    async () => {
+      const list = await venueService.getOwnerVenues();
+      return Array.isArray(list) ? list : [];
+    },
+    { ttl: CACHE_TTL.venues, revalidateOnMount: false, enabled: isVenueOwner }
+  );
+  const venueIdsKey = ownerVenues.map((v) => v.id).sort().join(",");
+  const { data: ownerVenueAnalytics = {} } = useCachedResource(
+    `profile:venue-analytics:${venueIdsKey}`,
+    async () => {
+      const ids = ownerVenues.map((v) => v.id).filter(Boolean);
+      if (ids.length === 0) return {};
+      const entries = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const data = await analyticsService.getVenueAnalytics(id, {});
+            return [id, data || {}];
+          } catch {
+            return [id, {}];
+          }
+        })
+      );
+      return Object.fromEntries(entries);
+    },
+    {
+      ttl: CACHE_TTL.dashboard,
+      revalidateOnMount: false,
+      enabled: isVenueOwner && ownerVenues.length > 0,
+    }
+  );
+  const { data: ownerReviewSummaries = {} } = useCachedResource(
+    `profile:venue-reviews:${venueIdsKey}`,
+    async () => {
+      const ids = ownerVenues.map((v) => v.id).filter(Boolean);
+      if (ids.length === 0) return {};
+      const entries = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const data = await venueService.getReviewSummary(id);
+            return [id, data || {}];
+          } catch {
+            return [id, {}];
+          }
+        })
+      );
+      return Object.fromEntries(entries);
+    },
+    {
+      ttl: CACHE_TTL.dashboard,
+      revalidateOnMount: false,
+      enabled: isVenueOwner && ownerVenues.length > 0,
+    }
+  );
+
+  // venue_owner "More" dropdown — collapses Docs/Venues/Reviews into a single
+  // tab-bar slot (chevron). Matches frontend PlayerCardPage More-dropdown UX.
+  const MORE_KEYS = ["documents", "venues", "reviews"];
+  const MORE_TAB_PLACEHOLDER = useMemo(
+    () => ({ key: "__more__", label: "More", IconComponent: ChevronDown, isMore: true }),
+    []
+  );
+  const moreTabs = useMemo(
+    () => (isVenueOwner ? TABS.filter((t) => MORE_KEYS.includes(t.key)) : []),
+    [TABS, isVenueOwner]
+  );
+  const visibleBarTabs = useMemo(() => {
+    if (!isVenueOwner) return TABS;
+    const fixed = TABS.filter((t) => !MORE_KEYS.includes(t.key));
+    return moreTabs.length > 0 ? [...fixed, MORE_TAB_PLACEHOLDER] : fixed;
+  }, [TABS, isVenueOwner, moreTabs.length, MORE_TAB_PLACEHOLDER]);
+  const isMoreActive = MORE_KEYS.includes(activeTab);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const moreBtnRef = useRef(null);
+  const [moreAnchor, setMoreAnchor] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const openMoreMenu = useCallback(() => {
+    if (!moreBtnRef.current) {
+      setShowMoreMenu(true);
+      return;
+    }
+    moreBtnRef.current.measureInWindow((x, y, width, height) => {
+      setMoreAnchor({ x, y, width, height });
+      setShowMoreMenu(true);
+    });
+  }, []);
+
+  const tabWidth = useMemo(
+    () => (SCREEN_WIDTH - 32) / Math.max(visibleBarTabs.length, 1),
+    [visibleBarTabs.length]
+  );
   const totalBookingPages = useMemo(() => Math.max(1, Math.ceil((bookingsTotal || 0) / BOOKING_PAGE_SIZE)), [bookingsTotal]);
   const [showFollowList, setShowFollowList] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState(false);
@@ -715,7 +821,16 @@ export default function ProfileScreenContent() {
 
   const indicatorTranslateX = indicatorProgress.interpolate({
     inputRange: TABS.map((_, index) => index),
-    outputRange: TABS.map((_, index) => index * tabWidth),
+    outputRange: TABS.map((_, index) => {
+      const tabKey = TABS[index].key;
+      // If this tab lives inside the More dropdown (venue_owner), pin the
+      // indicator to the More slot (last position in visibleBarTabs).
+      if (isVenueOwner && MORE_KEYS.includes(tabKey)) {
+        return (visibleBarTabs.length - 1) * tabWidth;
+      }
+      const visibleIdx = visibleBarTabs.findIndex((t) => t.key === tabKey);
+      return Math.max(0, visibleIdx) * tabWidth;
+    }),
     extrapolate: "clamp",
   });
 
@@ -804,9 +919,52 @@ export default function ProfileScreenContent() {
             {card?.is_verified && (
               <Ionicons name="checkmark-circle" size={18} color={PRIMARY_COLOR} />
             )}
-            <View style={[styles.tierPill, { backgroundColor: tier.bg, borderColor: tier.color }]}>
-              <Text style={[styles.tierPillText, { color: tier.color }]}>{tier.label}</Text>
-            </View>
+            {/* Tier pill — only for players, label from backend's overall_tier
+                (matches frontend PlayerCardPage tier memo exactly). */}
+            {card?.role === "player" ? (
+              <View
+                style={[
+                  styles.tierPill,
+                  { backgroundColor: "#ECFDF5", borderColor: "#10B981" },
+                ]}
+              >
+                <Text style={[styles.tierPillText, { color: "#10B981" }]}>
+                  {(card?.overall_tier || "Beginner").toUpperCase()}
+                </Text>
+              </View>
+            ) : null}
+
+            {/* Role pill — Venue Owner / Coach. Mirrors frontend
+                PlayerCardHeader.js:148-156. */}
+            {card?.role && card.role !== "player" && card.role !== "super_admin" ? (
+              <View
+                style={[
+                  styles.tierPill,
+                  card.role === "venue_owner"
+                    ? { backgroundColor: "#FFFBEB", borderColor: "#FCD34D" }
+                    : card.role === "coach"
+                      ? { backgroundColor: "#F5F3FF", borderColor: "#C4B5FD" }
+                      : { backgroundColor: "#F1F5F9", borderColor: "#CBD5E1" },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.tierPillText,
+                    card.role === "venue_owner"
+                      ? { color: "#D97706" }
+                      : card.role === "coach"
+                        ? { color: "#8B5CF6" }
+                        : { color: "#64748B" },
+                  ]}
+                >
+                  {card.role === "venue_owner"
+                    ? "VENUE OWNER"
+                    : card.role === "coach"
+                      ? "COACH"
+                      : card.role.replace("_", " ").toUpperCase()}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           {/* Sports */}
@@ -855,7 +1013,27 @@ export default function ProfileScreenContent() {
                 },
               ]}
             />
-            {TABS.map((item) => {
+            {visibleBarTabs.map((item) => {
+              if (item.isMore) {
+                // venue_owner More-dropdown trigger — anchored popover.
+                const active = isMoreActive;
+                const selectedMore = moreTabs.find((t) => t.key === activeTab);
+                const label = selectedMore ? selectedMore.label : "More";
+                return (
+                  <TouchableOpacity
+                    key="__more__"
+                    ref={moreBtnRef}
+                    activeOpacity={0.92}
+                    onPress={openMoreMenu}
+                    style={styles.tabButton}
+                  >
+                    <ChevronDown size={18} color={active ? PRIMARY_COLOR : "#94A3B8"} />
+                    <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              }
               const active = activeTab === item.key;
               return (
                 <TouchableOpacity
@@ -882,42 +1060,85 @@ export default function ProfileScreenContent() {
         {/* Stats Tab */}
         {visitedTabs.has("stats") && (
           <View style={[styles.tabPageFill, activeTab === "stats" ? null : styles.hiddenTabPage]}>
-            <View style={styles.statsTopGrid}>
-              <TouchableOpacity
-                style={styles.scorePanelPressable}
-                activeOpacity={0.92}
-                onPress={() => setShowLevelUpGuide(true)}
-              >
-                <AppCard style={styles.scorePanelCard}>
-                  <View style={styles.scorePanelHeader}>
-                    <Text style={styles.scorePanelEyebrow}>Overall Game Performance</Text>
-                    <BarChart3 size={14} color={PRIMARY_COLOR} />
-                  </View>
-                  <View style={styles.scorePanelBody}>
-                    <ScoreRing score={overallScore} size={82} strokeWidth={4} arcRotation={0} textSize={18} />
-                    <Text style={styles.scorePanelLevel}>{card?.overall_tier || tier.label}</Text>
-                  </View>
-                </AppCard>
-              </TouchableOpacity>
+            {/* Frontend parity: venue_owner Stats tab shows ONLY a single
+                full-width Engagement card (horizontal layout: score circle +
+                title/level + globe). Player keeps the 2-up grid below. */}
+            {isVenueOwner ? (
+              socialScore > 0 ? (
+                <TouchableOpacity
+                  activeOpacity={0.92}
+                  onPress={() => setShowEngagementGuide(true)}
+                  style={styles.engagementFullPressable}
+                >
+                  <AppCard style={styles.engagementFullCard}>
+                    <View style={styles.engagementFullRow}>
+                      <ScoreRing
+                        score={socialScore}
+                        size={72}
+                        strokeWidth={5}
+                        arcRotation={12}
+                        textSize={22}
+                      />
+                      <View style={styles.engagementFullText}>
+                        <Text style={styles.engagementFullTitle}>Engagement</Text>
+                        <Text style={styles.engagementFullLevel}>
+                          LEVEL {engagementLevel.toUpperCase()}
+                        </Text>
+                      </View>
+                      <Globe size={18} color={PRIMARY_COLOR} />
+                    </View>
+                  </AppCard>
+                </TouchableOpacity>
+              ) : null
+            ) : (
+              /* Player / coach: 2-up grid (Overall + Engagement) — frontend parity */
+              ((card?.role === "player" && card?.overall_score !== undefined) || socialScore > 0) ? (
+                <View style={styles.statsTopGrid}>
+                  {card?.role === "player" && card?.overall_score !== undefined ? (
+                    <TouchableOpacity
+                      style={styles.scorePanelPressable}
+                      activeOpacity={0.92}
+                      onPress={() => setShowLevelUpGuide(true)}
+                    >
+                      <AppCard style={styles.scorePanelCard}>
+                        <View style={styles.scorePanelHeader}>
+                          <Text style={styles.scorePanelEyebrow}>Overall Game Performance</Text>
+                          <BarChart3 size={14} color={PRIMARY_COLOR} />
+                        </View>
+                        <View style={styles.scorePanelBody}>
+                          <ScoreRing score={overallScore} size={82} strokeWidth={4} arcRotation={0} textSize={18} />
+                          <Text style={styles.scorePanelLevel}>{card?.overall_tier || tier.label}</Text>
+                        </View>
+                      </AppCard>
+                    </TouchableOpacity>
+                  ) : null}
 
-              <TouchableOpacity
-                style={styles.scorePanelPressable}
-                activeOpacity={0.92}
-                onPress={() => setShowEngagementGuide(true)}
-              >
-                <AppCard style={styles.scorePanelCard}>
-                  <View style={styles.scorePanelHeader}>
-                    <Text style={styles.scorePanelEyebrow}>Social Media Engagement</Text>
-                    <Globe size={14} color={PRIMARY_COLOR} />
-                  </View>
-                  <View style={styles.scorePanelBody}>
-                    <ScoreRing score={socialScore} size={82} strokeWidth={4} arcRotation={12} textSize={18} />
-                    <Text style={styles.scorePanelLevel}>Level {engagementLevel}</Text>
-                  </View>
-                </AppCard>
-              </TouchableOpacity>
-            </View>
+                  {socialScore > 0 ? (
+                    <TouchableOpacity
+                      style={styles.scorePanelPressable}
+                      activeOpacity={0.92}
+                      onPress={() => setShowEngagementGuide(true)}
+                    >
+                      <AppCard style={styles.scorePanelCard}>
+                        <View style={styles.scorePanelHeader}>
+                          <Text style={styles.scorePanelEyebrow}>Social Media Engagement</Text>
+                          <Globe size={14} color={PRIMARY_COLOR} />
+                        </View>
+                        <View style={styles.scorePanelBody}>
+                          <ScoreRing score={socialScore} size={82} strokeWidth={4} arcRotation={12} textSize={18} />
+                          <Text style={styles.scorePanelLevel}>Level {engagementLevel}</Text>
+                        </View>
+                      </AppCard>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ) : null
+            )}
 
+            {/* Player-only stats (hidden for coach & venue_owner) — mirrors
+                frontend PlayerCardPage.js:1000-1099 `card.role === "player" && (…)` */}
+            {card?.role === "player" ? (
+            <>
             <AppCard style={[styles.statsStripCard, styles.sectionSpacing]}>
               <View style={styles.statsStripRow}>
                 {[
@@ -1026,6 +1247,8 @@ export default function ProfileScreenContent() {
                 ))}
               </View>
             </AppCard>
+            </>
+            ) : null}
           </View>
         )}
 
@@ -1079,6 +1302,39 @@ export default function ProfileScreenContent() {
               )}
               {!!joinedBadgeText && <Text style={styles.badgesFooterText}>Joined {joinedBadgeText}</Text>}
             </AppCard>
+          </View>
+        )}
+
+        {/* Docs Tab (venue_owner only) — frontend renders VerificationBanner
+            ABOVE the upload form (pending_review / rejected / not_uploaded). */}
+        {visitedTabs.has("documents") && (
+          <View style={[styles.tabPageFill, activeTab === "documents" ? null : styles.hiddenTabPage]}>
+            <VerificationBanner user={user} />
+            <AppCard style={styles.sectionCard}>
+              <DocumentsUploadTab />
+            </AppCard>
+          </View>
+        )}
+
+        {/* Venues Tab (venue_owner only) — frontend VenuesList:
+            per-venue name + city + status + sports + 3 stat boxes. */}
+        {visitedTabs.has("venues") && (
+          <View style={[styles.tabPageFill, activeTab === "venues" ? null : styles.hiddenTabPage]}>
+            <OwnerVenuesList
+              ownerVenues={ownerVenues}
+              venueAnalytics={ownerVenueAnalytics}
+              reviewSummaries={ownerReviewSummaries}
+            />
+          </View>
+        )}
+
+        {/* Reviews Tab (venue_owner only) — frontend ReviewsList */}
+        {visitedTabs.has("reviews") && (
+          <View style={[styles.tabPageFill, activeTab === "reviews" ? null : styles.hiddenTabPage]}>
+            <OwnerReviewsList
+              ownerVenues={ownerVenues}
+              reviewSummaries={ownerReviewSummaries}
+            />
           </View>
         )}
 
@@ -2049,11 +2305,131 @@ export default function ProfileScreenContent() {
           </View>
         </View>
       </Modal>
+
+      {/* venue_owner More dropdown — anchored popover under the More tab.
+          Transparent overlay (no dim) so the rest of the screen stays visible. */}
+      <Modal
+        visible={showMoreMenu}
+        transparent
+        animationType="none"
+        onRequestClose={() => setShowMoreMenu(false)}
+      >
+        <Pressable
+          style={StyleSheet.absoluteFillObject}
+          onPress={() => setShowMoreMenu(false)}
+        />
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.moreMenuAnchor,
+            {
+              top: moreAnchor.y + moreAnchor.height + 6,
+              right: Math.max(8, SCREEN_WIDTH - (moreAnchor.x + moreAnchor.width)),
+            },
+          ]}
+        >
+          <View style={styles.moreMenuCard}>
+            {moreTabs.map((item, idx) => {
+              const active = activeTab === item.key;
+              const isLast = idx === moreTabs.length - 1;
+              const Icon = item.IconComponent;
+              return (
+                <TouchableOpacity
+                  key={item.key}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setShowMoreMenu(false);
+                    handleTabChange(item.key);
+                  }}
+                  style={[
+                    styles.moreMenuItem,
+                    !isLast && styles.moreMenuItemBorder,
+                    active && styles.moreMenuItemActive,
+                  ]}
+                >
+                  {Icon ? <Icon size={16} color={active ? PRIMARY_COLOR : "#475569"} /> : null}
+                  <Text style={[styles.moreMenuLabel, active && styles.moreMenuLabelActive]}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  /* venue_owner Stats — single full-width Engagement card (frontend parity) */
+  engagementFullPressable: { width: "100%" },
+  engagementFullCard: {
+    padding: 18,
+    borderWidth: 1.5,
+    borderColor: `${PRIMARY_COLOR}55`,
+    borderRadius: 18,
+  },
+  engagementFullRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  engagementFullText: { flex: 1 },
+  engagementFullTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0F172A",
+    marginBottom: 4,
+  },
+  engagementFullLevel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: PRIMARY_COLOR,
+    letterSpacing: 1.5,
+  },
+
+  /* venue_owner "More" dropdown (anchored popover, no full-screen dim) */
+  moreMenuAnchor: {
+    position: "absolute",
+  },
+  moreMenuCard: {
+    minWidth: 180,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    paddingVertical: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  moreMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  moreMenuItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+  },
+  moreMenuItemActive: {
+    backgroundColor: "#F0FDF4",
+  },
+  moreMenuLabel: {
+    fontSize: 14,
+    color: "#0F172A",
+    fontWeight: "600",
+  },
+  moreMenuLabelActive: {
+    color: PRIMARY_COLOR,
+    fontWeight: "700",
+  },
+
   content: {
     padding: 16,
     gap: 16,

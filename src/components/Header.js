@@ -15,6 +15,11 @@ import { useLocation } from "../context/LocationContext";
 import { safePush } from "../services/navigationGuard";
 import { mediaUrl } from "../utils/media";
 
+// Shared drawer controller — SwipeableTabView assigns `openExternal` /
+// `closeExternal` on mount so its gesture-driven panel can be opened from
+// outside (Header hamburger tap). Mirrors mobile/src/components/Header.
+export const _drawerCtrl = { openExternal: null, closeExternal: null };
+
 // Owner tab routes — back button auto-hides on these, hamburger shows instead
 const TAB_ROUTES = new Set([
   "/feed",
@@ -42,6 +47,18 @@ export default function Header({
   const { user } = useAuth();
   const { location } = useLocation();
   const [drawerVisible, setDrawerVisible] = useState(false);
+
+  // Hamburger tap: if the parent SwipeableTabView has registered an external
+  // drawer opener (animated panel + gesture-driven), prefer it. Otherwise
+  // fall back to the local SideDrawer Modal — used on stack screens that
+  // sit outside the pager.
+  const openDrawerFromHeader = () => {
+    if (_drawerCtrl && _drawerCtrl.openExternal) {
+      _drawerCtrl.openExternal();
+    } else {
+      setDrawerVisible(true);
+    }
+  };
   const [showLogout, setShowLogout] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
@@ -71,7 +88,7 @@ export default function Header({
             </TouchableOpacity>
           ) : shouldShowMenu ? (
             <TouchableOpacity
-              onPress={() => setDrawerVisible(true)}
+              onPress={openDrawerFromHeader}
               style={styles.iconButton}
               activeOpacity={0.8}
             >

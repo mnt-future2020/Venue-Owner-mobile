@@ -460,7 +460,11 @@ export default function PlayerCardScreenContent({ onNameLoaded }) {
     ];
   }, [card?.badges]);
 
+  // Match frontend PlayerCardPage exactly — it reads `engagementScore.level`
+  // straight from the API (`/engagement/score`). Fall back to a local score-band
+  // mapping if the backend hasn't included `level` yet (older payloads).
   const engagementLevel = useMemo(() => {
+    if (engagement?.level) return engagement.level;
     const score = engagement?.score || engagement?.engagement_score || 0;
     if (score >= 80) return "Legend";
     if (score >= 60) return "All-Star";
@@ -753,16 +757,52 @@ export default function PlayerCardScreenContent({ onNameLoaded }) {
                 color={PRIMARY_COLOR}
               />
             )}
-            <View
-              style={[
-                styles.tierPill,
-                { backgroundColor: tier.bg, borderColor: tier.color },
-              ]}
-            >
-              <Text style={[styles.tierPillText, { color: tier.color }]}>
-                {tier.label}
-              </Text>
-            </View>
+            {/* Tier pill — only for players, label sourced from backend's
+                `overall_tier` (matches frontend PlayerCardPage tier memo). */}
+            {card?.role === "player" ? (
+              <View
+                style={[
+                  styles.tierPill,
+                  { backgroundColor: "#ECFDF5", borderColor: "#10B981" },
+                ]}
+              >
+                <Text style={[styles.tierPillText, { color: "#10B981" }]}>
+                  {(card?.overall_tier || "Beginner").toUpperCase()}
+                </Text>
+              </View>
+            ) : null}
+
+            {/* Role pill — Venue Owner / Coach. Mirrors frontend
+                PlayerCardHeader.js:148-156 (player & super_admin skipped). */}
+            {card?.role && card.role !== "player" && card.role !== "super_admin" ? (
+              <View
+                style={[
+                  styles.tierPill,
+                  card.role === "venue_owner"
+                    ? { backgroundColor: "#FFFBEB", borderColor: "#FCD34D" }
+                    : card.role === "coach"
+                      ? { backgroundColor: "#F5F3FF", borderColor: "#C4B5FD" }
+                      : { backgroundColor: "#F1F5F9", borderColor: "#CBD5E1" },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.tierPillText,
+                    card.role === "venue_owner"
+                      ? { color: "#D97706" }
+                      : card.role === "coach"
+                        ? { color: "#8B5CF6" }
+                        : { color: "#64748B" },
+                  ]}
+                >
+                  {card.role === "venue_owner"
+                    ? "VENUE OWNER"
+                    : card.role === "coach"
+                      ? "COACH"
+                      : card.role.replace("_", " ").toUpperCase()}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           {/* Sports */}
@@ -895,55 +935,70 @@ export default function PlayerCardScreenContent({ onNameLoaded }) {
                 activeTab === "stats" ? styles.statsPage : styles.hiddenTabPage,
               ]}
             >
-              <View style={styles.scoreCardsRow}>
-                <AppCard style={styles.scoreDialCard}>
-                  <View style={styles.scoreDialHeader}>
-                    <Text style={styles.scoreDialTitle}>
-                      OVERALL GAME PERFORMANCE
-                    </Text>
-                    <BarChart3 size={14} color={PRIMARY_COLOR} />
-                  </View>
-                  <View style={styles.scoreDialBody}>
-                    <ScoreRing
-                      score={overallScore}
-                      size={96}
-                      strokeWidth={5}
-                      arcRotation={0}
-                      textSize={22}
-                    />
-                    <Text style={styles.scoreDialLabel}>
-                      {(card?.overall_tier || tier.label).toUpperCase()}
-                    </Text>
-                  </View>
-                </AppCard>
+              {/* Score cards — gated exactly like frontend PlayerCardPage:
+                  - Overall Game Performance: only for role === "player"
+                  - Social Media Engagement: only when score > 0
+                  Venue owner / coach with no engagement → no cards shown. */}
+              {(card?.role === "player" && card?.overall_score !== undefined) || socialScore > 0 ? (
+                <View style={styles.scoreCardsRow}>
+                  {card?.role === "player" && card?.overall_score !== undefined ? (
+                    <AppCard style={styles.scoreDialCard}>
+                      <View style={styles.scoreDialHeader}>
+                        <Text style={styles.scoreDialTitle}>
+                          OVERALL GAME PERFORMANCE
+                        </Text>
+                        <BarChart3 size={14} color={PRIMARY_COLOR} />
+                      </View>
+                      <View style={styles.scoreDialBody}>
+                        <ScoreRing
+                          score={overallScore}
+                          size={96}
+                          strokeWidth={5}
+                          arcRotation={0}
+                          textSize={22}
+                        />
+                        <Text style={styles.scoreDialLabel}>
+                          {(card?.overall_tier || tier.label).toUpperCase()}
+                        </Text>
+                      </View>
+                    </AppCard>
+                  ) : null}
 
-                <TouchableOpacity
-                  activeOpacity={0.92}
-                  style={styles.scoreDialPressable}
-                  onPress={() => setShowEngagementGuide(true)}
-                >
-                  <AppCard style={styles.scoreDialCard}>
-                    <View style={styles.scoreDialHeader}>
-                      <Text style={styles.scoreDialTitle}>
-                        SOCIAL MEDIA ENGAGEMENT
-                      </Text>
-                      <Globe size={14} color={PRIMARY_COLOR} />
-                    </View>
-                    <View style={styles.scoreDialBody}>
-                      <ScoreRing
-                        score={socialScore}
-                        size={96}
-                        strokeWidth={5}
-                        arcRotation={12}
-                        textSize={22}
-                      />
-                      <Text style={styles.scoreDialLabel}>
-                        {engagementLevel.toUpperCase()}
-                      </Text>
-                    </View>
-                  </AppCard>
-                </TouchableOpacity>
-              </View>
+                  {socialScore > 0 ? (
+                    <TouchableOpacity
+                      activeOpacity={0.92}
+                      style={styles.scoreDialPressable}
+                      onPress={() => setShowEngagementGuide(true)}
+                    >
+                      <AppCard style={styles.scoreDialCard}>
+                        <View style={styles.scoreDialHeader}>
+                          <Text style={styles.scoreDialTitle}>
+                            SOCIAL MEDIA ENGAGEMENT
+                          </Text>
+                          <Globe size={14} color={PRIMARY_COLOR} />
+                        </View>
+                        <View style={styles.scoreDialBody}>
+                          <ScoreRing
+                            score={socialScore}
+                            size={96}
+                            strokeWidth={5}
+                            arcRotation={12}
+                            textSize={22}
+                          />
+                          <Text style={styles.scoreDialLabel}>
+                            LEVEL {engagementLevel.toUpperCase()}
+                          </Text>
+                        </View>
+                      </AppCard>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ) : null}
+
+              {/* Player-only stats (hidden for coach & venue_owner) — mirrors
+                  frontend PlayerCardPage.js:1000 `card.role === "player" && (…)` */}
+              {card?.role === "player" ? (
+              <>
 
               <AppCard style={styles.statsStripCard}>
                 <View style={styles.statsStripRow}>
@@ -1137,6 +1192,8 @@ export default function PlayerCardScreenContent({ onNameLoaded }) {
                   </View>
                 </View>
               </AppCard>
+              </>
+              ) : null}
             </View>
           )}
 

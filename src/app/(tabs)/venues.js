@@ -39,7 +39,7 @@ import useCachedResource from "../../hooks/useCachedResource";
 import { CACHE_TTL } from "../../services/queryCache";
 import TabRefreshContext from "../../context/TabRefreshContext";
 import useNotificationBell from "../../hooks/useNotificationBell";
-// import SwipeTabContext from "../../context/SwipeTabContext"; // disabled with swipeable pager
+import SwipeTabContext from "../../context/SwipeTabContext";
 
 import {
   BookingsTab,
@@ -82,9 +82,8 @@ function buildPublicUrl(venue) {
 }
 
 export default function VenueManagementScreen() {
-  // Swipeable pager guard — commented out while plain Tabs is in use.
-  // const { inPager } = useContext(SwipeTabContext);
-  // if (!inPager) return null;
+  const { inPager } = useContext(SwipeTabContext);
+  if (!inPager) return null;
 
   const router = useRouter();
   const { refreshSignals } = useContext(TabRefreshContext);
