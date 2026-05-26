@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Dimensions,
   FlatList,
@@ -35,6 +34,7 @@ import { mediaUrl } from "../../utils/media";
 import toast from "../../utils/toast";
 import { PRIMARY_COLOR, FONTS } from "../../constants/theme";
 import FeedCommentsSheet from "../feed/FeedCommentsSheet";
+import ConfirmModal from "../ui/ConfirmModal";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const GRID_GAP = 2;
@@ -208,6 +208,8 @@ function PostDetailModal({ post, visible, onClose, onDelete, currentUserId }) {
   const [commentInput, setCommentInput] = useState("");
   const [loadingComments, setLoadingComments] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [commentCursor, setCommentCursor] = useState(null);
   const [commentHasMore, setCommentHasMore] = useState(false);
   const [loadingMoreComments, setLoadingMoreComments] = useState(false);
@@ -357,24 +359,21 @@ function PostDetailModal({ post, visible, onClose, onDelete, currentUserId }) {
     }
   };
 
-  const handleDelete = () => {
-    Alert.alert("Delete Post?", "This action cannot be undone. This post will be permanently deleted.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await socialService.deletePost(post.id);
-            toast.success("Post deleted");
-            onDelete?.(post.id);
-            onClose();
-          } catch {
-            toast.error("Failed to delete post");
-          }
-        },
-      },
-    ]);
+  const handleDelete = () => setShowDeleteConfirm(true);
+
+  const confirmDelete = async () => {
+    setDeleting(true);
+    try {
+      await socialService.deletePost(post.id);
+      toast.success("Post deleted");
+      onDelete?.(post.id);
+      setShowDeleteConfirm(false);
+      onClose();
+    } catch {
+      toast.error("Failed to delete post");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleToggleVideoMute = () => {
@@ -546,6 +545,18 @@ function PostDetailModal({ post, visible, onClose, onDelete, currentUserId }) {
           onLoadMore={loadMoreComments}
           hasMore={commentHasMore}
           currentUserId={currentUserId}
+        />
+
+        {/* Delete confirmation — styled like LogoutModal (replaces system Alert.alert) */}
+        <ConfirmModal
+          visible={showDeleteConfirm}
+          onClose={() => setShowDeleteConfirm(false)}
+          onConfirm={confirmDelete}
+          icon={Trash2}
+          title="Delete Post?"
+          message="This action cannot be undone. This post will be permanently deleted."
+          confirmText="Delete"
+          loading={deleting}
         />
       </View>
     </Modal>

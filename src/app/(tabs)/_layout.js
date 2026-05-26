@@ -34,13 +34,16 @@ import BottomTabBar from "../../components/BottomTabBar";
 export default function TabsLayout() {
   return (
     <Tabs
+      initialRouteName="feed"
       screenOptions={{ headerShown: false }}
       tabBar={(props) => <BottomTabBar {...props} />}
     >
-      <Tabs.Screen name="dashboard" options={{ title: "Dashboard" }} />
+      <Tabs.Screen name="feed" options={{ title: "Feed" }} />
       <Tabs.Screen name="venues" options={{ title: "Venue Mgmt" }} />
+      <Tabs.Screen name="dashboard" options={{ title: "Dashboard" }} />
       <Tabs.Screen name="finance" options={{ title: "Finance" }} />
-      <Tabs.Screen name="profile" options={{ title: "Profile" }} />
+      <Tabs.Screen name="chat" options={{ title: "Chat" }} />
+      <Tabs.Screen name="profile" options={{ title: "Profile", href: null }} />
     </Tabs>
   );
 }

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
-import { User, Settings as SettingsIcon, LogOut } from "lucide-react-native";
+import { User, Settings as SettingsIcon, LogOut, Bookmark } from "lucide-react-native";
 import { usePathname, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Logo from "./Logo";
@@ -17,9 +17,11 @@ import { mediaUrl } from "../utils/media";
 
 // Owner tab routes — back button auto-hides on these, hamburger shows instead
 const TAB_ROUTES = new Set([
+  "/feed",
   "/dashboard",
   "/venues",
   "/finance",
+  "/chat",
   "/profile",
 ]);
 
@@ -208,7 +210,7 @@ export default function Header({
           style={styles.dropdownOverlay}
           onPress={() => setShowProfileMenu(false)}
         >
-          <View style={[styles.dropdownCard, { top: insets.top + 56 }]}>
+          <View style={[styles.dropdownCard, { top: insets.top + 70 }]}>
             <TouchableOpacity
               style={styles.dropdownItem}
               activeOpacity={0.7}
@@ -219,6 +221,17 @@ export default function Header({
             >
               <User size={18} color="#475569" strokeWidth={2} />
               <Text style={styles.dropdownLabel}>Profile</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.dropdownItem}
+              activeOpacity={0.7}
+              onPress={() => {
+                setShowProfileMenu(false);
+                safePush(router, "/(stack)/bookmarks");
+              }}
+            >
+              <Bookmark size={18} color="#475569" strokeWidth={2} />
+              <Text style={styles.dropdownLabel}>Saved Posts</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.dropdownItem}

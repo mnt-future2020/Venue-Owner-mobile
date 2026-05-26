@@ -51,8 +51,6 @@ import {
   ChevronRight,
   Send,
   Star,
-  FileText,
-  ChevronDown,
 } from "lucide-react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -62,13 +60,8 @@ import AppCard from "../ui/AppCard";
 import PostsGrid from "./PostsGrid";
 import FollowListSheet from "./FollowListSheet";
 import EditProfileSheet from "./EditProfileSheet";
-import DocumentsUploadTab from "./DocumentsUploadTab";
-import OwnerVenuesList from "./OwnerVenuesList";
-import OwnerReviewsList from "./OwnerReviewsList";
-import VenueOwnerStats from "./VenueOwnerStats";
-import VerificationBanner from "./VerificationBanner";
-import useCachedResource from "../../hooks/useCachedResource";
-import { CACHE_TTL } from "../../services/queryCache";
+import ProfileSkeleton from "../skeletons/ProfileSkeleton";
+import FinancePanel from "../venue/FinancePanel";
 import playerService from "../../services/playerService";
 import analyticsService from "../../services/analyticsService";
 import socialService from "../../services/socialService";
@@ -79,6 +72,7 @@ import { safePush } from "../../services/navigationGuard";
 import { useAuth } from "../../context/AuthContext";
 import { mediaUrl } from "../../utils/media";
 import toast from "../../utils/toast";
+import * as Clipboard from "expo-clipboard";
 import { PRIMARY_COLOR } from "../../constants/theme";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -90,43 +84,8 @@ const BASE_TABS = [
 ];
 const BOOKINGS_TAB = { key: "bookings", label: "Bookings", IconComponent: Calendar };
 const BADGES_TAB = { key: "badges", label: "Badges", IconComponent: Award };
-// venue_owner More-dropdown tabs (frontend PlayerCardPage PROFILE_TABS.venue_owner):
-//   Badges, Docs, Venues, Reviews — NO Finance (venue has a dedicated Finance bottom tab).
-const DOCUMENTS_TAB = { key: "documents", label: "Docs", IconComponent: FileText };
-const VENUES_TAB = { key: "venues", label: "Venues", IconComponent: Building2 };
-const REVIEWS_TAB = { key: "reviews", label: "Reviews", IconComponent: Star };
+const FINANCE_TAB = { key: "finance", label: "Finance", IconComponent: TrendingUp };
 const BOOKING_PAGE_SIZE = 10;
-
-// Mirrors frontend AchievementsSection.js — icon string → lucide component,
-// and badge.name → color tint (text + bg + border). Tints follow the same
-// tailwind palette: bg-{color}/10, border-{color}/20, text-{color}-500.
-const BADGE_ICONS = {
-  trophy: Trophy,
-  star: Star,
-  zap: Zap,
-  crown: Crown,
-  award: Award,
-  shield: Shield,
-  medal: Medal,
-  flame: Flame,
-  "badge-check": BadgeCheck,
-};
-const BADGE_CONFIG = {
-  Century: { color: "#F59E0B", bg: "rgba(245,158,11,0.10)", border: "rgba(245,158,11,0.20)" },
-  Veteran: { color: "#8B5CF6", bg: "rgba(139,92,246,0.10)", border: "rgba(139,92,246,0.20)" },
-  Regular: { color: PRIMARY_COLOR, bg: `${PRIMARY_COLOR}1A`, border: `${PRIMARY_COLOR}33` },
-  Elite: { color: "#FBBF24", bg: "rgba(251,191,36,0.10)", border: "rgba(251,191,36,0.20)" },
-  Pro: { color: PRIMARY_COLOR, bg: `${PRIMARY_COLOR}1A`, border: `${PRIMARY_COLOR}33` },
-  Reliable: { color: "#10B981", bg: "rgba(16,185,129,0.10)", border: "rgba(16,185,129,0.20)" },
-  Champion: { color: "#F59E0B", bg: "rgba(245,158,11,0.10)", border: "rgba(245,158,11,0.20)" },
-  Verified: { color: PRIMARY_COLOR, bg: `${PRIMARY_COLOR}1A`, border: `${PRIMARY_COLOR}33` },
-  "On Fire": { color: "#F97316", bg: "rgba(249,115,22,0.10)", border: "rgba(249,115,22,0.20)" },
-};
-const DEFAULT_BADGE_CONFIG = {
-  color: PRIMARY_COLOR,
-  bg: `${PRIMARY_COLOR}1A`,
-  border: `${PRIMARY_COLOR}33`,
-};
 
 const SCORE_METRICS = [
   {
@@ -401,110 +360,11 @@ export default function ProfileScreenContent() {
     }
     tabs.push(BADGES_TAB);
     if (isOwnProfile && user?.role === "venue_owner") {
-      tabs.push(DOCUMENTS_TAB, VENUES_TAB, REVIEWS_TAB);
+      tabs.push(FINANCE_TAB);
     }
     return tabs;
   }, [isOwnProfile, user?.role]);
-  // For venue_owner the bar shows only 3 fixed tabs (Posts/Stats/Badges) + a
-  // 4th "More" button that opens a dropdown with Docs/Venues/Reviews.
-  // For other roles, every tab in TABS is shown directly.
-  const isVenueOwner = user?.role === "venue_owner";
-
-  // venue_owner Stats tab data — fetched once (cached, shared with other
-  // tabs). Aggregated into VenueOwnerStats below; the player score
-  // rings/win-rate/match-record are gated out for this role.
-  const { data: ownerVenues = [] } = useCachedResource(
-    "venue:owner-venues",
-    async () => {
-      const list = await venueService.getOwnerVenues();
-      return Array.isArray(list) ? list : [];
-    },
-    { ttl: CACHE_TTL.venues, revalidateOnMount: false, enabled: isVenueOwner }
-  );
-  const venueIdsKey = ownerVenues.map((v) => v.id).sort().join(",");
-  const { data: ownerVenueAnalytics = {} } = useCachedResource(
-    `profile:venue-analytics:${venueIdsKey}`,
-    async () => {
-      const ids = ownerVenues.map((v) => v.id).filter(Boolean);
-      if (ids.length === 0) return {};
-      const entries = await Promise.all(
-        ids.map(async (id) => {
-          try {
-            const data = await analyticsService.getVenueAnalytics(id, {});
-            return [id, data || {}];
-          } catch {
-            return [id, {}];
-          }
-        })
-      );
-      return Object.fromEntries(entries);
-    },
-    {
-      ttl: CACHE_TTL.dashboard,
-      revalidateOnMount: false,
-      enabled: isVenueOwner && ownerVenues.length > 0,
-    }
-  );
-  // Per-venue review summary (avg_rating + total + distribution). Used by
-  // both the Venues tab card rating stat and the Reviews tab.
-  const { data: ownerReviewSummaries = {} } = useCachedResource(
-    `profile:venue-reviews:${venueIdsKey}`,
-    async () => {
-      const ids = ownerVenues.map((v) => v.id).filter(Boolean);
-      if (ids.length === 0) return {};
-      const entries = await Promise.all(
-        ids.map(async (id) => {
-          try {
-            const data = await venueService.getReviewSummary(id);
-            return [id, data || {}];
-          } catch {
-            return [id, {}];
-          }
-        })
-      );
-      return Object.fromEntries(entries);
-    },
-    {
-      ttl: CACHE_TTL.dashboard,
-      revalidateOnMount: false,
-      enabled: isVenueOwner && ownerVenues.length > 0,
-    }
-  );
-  const MORE_KEYS = ["documents", "venues", "reviews"];
-  const MORE_TAB_PLACEHOLDER = useMemo(
-    () => ({ key: "__more__", label: "More", IconComponent: ChevronDown, isMore: true }),
-    []
-  );
-  const moreTabs = useMemo(
-    () => (isVenueOwner ? TABS.filter((t) => MORE_KEYS.includes(t.key)) : []),
-    [TABS, isVenueOwner]
-  );
-  const visibleBarTabs = useMemo(() => {
-    if (!isVenueOwner) return TABS;
-    const fixed = TABS.filter((t) => !MORE_KEYS.includes(t.key));
-    return moreTabs.length > 0 ? [...fixed, MORE_TAB_PLACEHOLDER] : fixed;
-  }, [TABS, isVenueOwner, moreTabs.length, MORE_TAB_PLACEHOLDER]);
-  const isMoreActive = MORE_KEYS.includes(activeTab);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
-  // Anchor coordinates for the dropdown (screen-relative, captured from
-  // measureInWindow on the More button). Stored so the popover positions
-  // directly below the arrow instead of using a full-screen dim modal.
-  const moreBtnRef = useRef(null);
-  const [moreAnchor, setMoreAnchor] = useState({ x: 0, y: 0, width: 0, height: 0 });
-  const openMoreMenu = useCallback(() => {
-    if (!moreBtnRef.current) {
-      setShowMoreMenu(true);
-      return;
-    }
-    moreBtnRef.current.measureInWindow((x, y, width, height) => {
-      setMoreAnchor({ x, y, width, height });
-      setShowMoreMenu(true);
-    });
-  }, []);
-  const tabWidth = useMemo(
-    () => (SCREEN_WIDTH - 32) / Math.max(visibleBarTabs.length, 1),
-    [visibleBarTabs.length]
-  );
+  const tabWidth = useMemo(() => (SCREEN_WIDTH - 32) / Math.max(TABS.length, 1), [TABS.length]);
   const totalBookingPages = useMemo(() => Math.max(1, Math.ceil((bookingsTotal || 0) / BOOKING_PAGE_SIZE)), [bookingsTotal]);
   const [showFollowList, setShowFollowList] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState(false);
@@ -695,13 +555,31 @@ export default function ProfileScreenContent() {
   const avatarUri = card?.avatar || displayUser.avatar;
 
   const handleShare = async () => {
+    // Frontend player-profile route is `/player-card/:userId` (App.js:481), so the
+    // share link follows the same pattern. The URL is appended to the `message` body
+    // because React Native's `Share.share` on Android forwards only `message` to
+    // receiving apps (WhatsApp, Telegram, etc.) — same fix as bug #11 (venue share).
+    const userId = displayUser?.id || card?.user_id;
+    const profileUrl = userId ? `https://app.lobbi.in/player-card/${userId}` : "";
+    const name = displayUser.name || "my";
     try {
       await Share.share({
-        message: `Check out ${displayUser.name || "my"} profile on Lobbi!`,
-        title: "Share Profile",
+        title: `${name} on Lobbi`,
+        message: profileUrl
+          ? `Check out ${name}'s profile on Lobbi!\n${profileUrl}`
+          : `Check out ${name}'s profile on Lobbi!`,
+        url: profileUrl,
       });
     } catch {
-      // cancelled
+      // Share sheet was opened but a real failure occurred — fall back to clipboard.
+      if (profileUrl) {
+        try {
+          await Clipboard.setStringAsync(profileUrl);
+          toast.success("Link copied to clipboard!");
+        } catch {
+          toast.error("Could not copy link. Please copy it manually.");
+        }
+      }
     }
   };
 
@@ -715,7 +593,9 @@ export default function ProfileScreenContent() {
   }, [card?.badges]);
 
   const engagementLevel = useMemo(() => {
-    const score = engagement?.score || engagement?.engagement_score || 0;
+    // Mirror frontend (PlayerCardPage:873-906) — reads only `engagementScore.score`.
+    // Dropped the `engagement?.engagement_score` alias.
+    const score = engagement?.score || 0;
     if (score >= 80) return "Legend";
     if (score >= 60) return "All-Star";
     if (score >= 40) return "Pro";
@@ -723,13 +603,22 @@ export default function ProfileScreenContent() {
     return "Bench";
   }, [engagement]);
   const overallScore = card?.overall_score ?? 0;
-  const socialScore = engagement?.score || engagement?.engagement_score || 0;
+  const socialScore = engagement?.score || 0;
+  // Exact mirror of frontend PlayerCardPage.winRate (line 196-206):
+  //   wins / (wins + losses + draws) * 100
+  // Previously divided by `total_games` which counts unrelated rows (e.g. bookings,
+  // open matches) and inflated the % — Syed's 3W/6L/0D came out as 75% instead of 33%.
   const winRate = useMemo(() => {
-    const totalGames = card?.total_games ?? stats?.total_games ?? 0;
-    const wins = card?.wins ?? stats?.wins ?? 0;
-    return totalGames > 0 ? Math.round((wins / totalGames) * 100) : 0;
-  }, [card?.total_games, card?.wins, stats?.total_games, stats?.wins]);
-  const reliablePct = card?.reliability_score ?? card?.reliability ?? 0;
+    if (!card) return 0;
+    const wins = card?.wins ?? 0;
+    const losses = card?.losses ?? 0;
+    const draws = card?.draws ?? 0;
+    const denom = Math.max(wins + losses + draws, 1);
+    return Math.round((wins / denom) * 100);
+  }, [card]);
+  // Exact mirror of frontend PlayerCardPage:1024 — `card.reliability_score ?? 0`
+  // only. Dropped the mobile-only `card?.reliability` alias.
+  const reliablePct = card?.reliability_score ?? 0;
   const matchTotal = Math.max((card?.wins || 0) + (card?.losses || 0) + (card?.draws || 0), 1);
   const winsPct = Math.round(((card?.wins || 0) / matchTotal) * 100);
   const lossesPct = Math.round(((card?.losses || 0) / matchTotal) * 100);
@@ -826,26 +715,12 @@ export default function ProfileScreenContent() {
 
   const indicatorTranslateX = indicatorProgress.interpolate({
     inputRange: TABS.map((_, index) => index),
-    outputRange: TABS.map((_, index) => {
-      const tabKey = TABS[index].key;
-      // If this tab lives inside the More dropdown (venue_owner), pin the
-      // indicator to the More slot (last position in visibleBarTabs).
-      if (isVenueOwner && MORE_KEYS.includes(tabKey)) {
-        return (visibleBarTabs.length - 1) * tabWidth;
-      }
-      const visibleIdx = visibleBarTabs.findIndex((t) => t.key === tabKey);
-      return Math.max(0, visibleIdx) * tabWidth;
-    }),
+    outputRange: TABS.map((_, index) => index * tabWidth),
     extrapolate: "clamp",
   });
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={PRIMARY_COLOR} />
-        <Text style={styles.loadingText}>Loading profile...</Text>
-      </View>
-    );
+    return <ProfileSkeleton />;
   }
 
   return (
@@ -920,8 +795,7 @@ export default function ProfileScreenContent() {
           {/* Name Row */}
           <View style={styles.nameRow}>
             <Text style={styles.profileName}>{displayUser.name || "Player"}</Text>
-            {/* Streak pill: player-only (venue_owner doesn't track streaks) */}
-            {!isVenueOwner && (card?.current_streak || 0) > 0 && (
+            {(card?.current_streak || 0) > 0 && (
               <TouchableOpacity activeOpacity={0.85} style={styles.streakPill} onPress={() => handleTabChange("stats")}>
                 <Flame size={11} color="#F97316" />
                 <Text style={styles.streakText}>{card.current_streak}</Text>
@@ -930,17 +804,9 @@ export default function ProfileScreenContent() {
             {card?.is_verified && (
               <Ionicons name="checkmark-circle" size={18} color={PRIMARY_COLOR} />
             )}
-            {/* Tier pill (Beginner/Pro/Elite) is player-only; venue_owner sees
-                the amber "VENUE OWNER" pill instead (matches frontend Navbar). */}
-            {isVenueOwner ? (
-              <View style={styles.venueOwnerPill}>
-                <Text style={styles.venueOwnerPillText}>VENUE OWNER</Text>
-              </View>
-            ) : (
-              <View style={[styles.tierPill, { backgroundColor: tier.bg, borderColor: tier.color }]}>
-                <Text style={[styles.tierPillText, { color: tier.color }]}>{tier.label}</Text>
-              </View>
-            )}
+            <View style={[styles.tierPill, { backgroundColor: tier.bg, borderColor: tier.color }]}>
+              <Text style={[styles.tierPillText, { color: tier.color }]}>{tier.label}</Text>
+            </View>
           </View>
 
           {/* Sports */}
@@ -989,29 +855,7 @@ export default function ProfileScreenContent() {
                 },
               ]}
             />
-            {visibleBarTabs.map((item) => {
-              if (item.isMore) {
-                // venue_owner More-dropdown trigger — anchored popover, NOT
-                // a fullscreen modal (measureInWindow stores button rect on
-                // tap, dropdown positions directly under it).
-                const active = isMoreActive;
-                const selectedMore = moreTabs.find((t) => t.key === activeTab);
-                const label = selectedMore ? selectedMore.label : "More";
-                return (
-                  <TouchableOpacity
-                    key="__more__"
-                    ref={moreBtnRef}
-                    activeOpacity={0.92}
-                    onPress={openMoreMenu}
-                    style={styles.tabButton}
-                  >
-                    <ChevronDown size={18} color={active ? PRIMARY_COLOR : "#94A3B8"} />
-                    <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              }
+            {TABS.map((item) => {
               const active = activeTab === item.key;
               return (
                 <TouchableOpacity
@@ -1038,38 +882,6 @@ export default function ProfileScreenContent() {
         {/* Stats Tab */}
         {visitedTabs.has("stats") && (
           <View style={[styles.tabPageFill, activeTab === "stats" ? null : styles.hiddenTabPage]}>
-            {/* Frontend parity: venue_owner Stats tab shows ONLY a single
-                full-width Engagement card. Tap → opens the same Engagement
-                Guide modal (Social Media Engagement Level explainer).
-                Player score rings / win rate / match record are gated below
-                so the code stays intact for reference. */}
-            {isVenueOwner ? (
-              <TouchableOpacity
-                activeOpacity={0.92}
-                onPress={() => setShowEngagementGuide(true)}
-                style={styles.engagementFullPressable}
-              >
-                <AppCard style={styles.engagementFullCard}>
-                  <View style={styles.engagementFullRow}>
-                    <ScoreRing
-                      score={socialScore}
-                      size={72}
-                      strokeWidth={5}
-                      arcRotation={12}
-                      textSize={22}
-                    />
-                    <View style={styles.engagementFullText}>
-                      <Text style={styles.engagementFullTitle}>Engagement</Text>
-                      <Text style={styles.engagementFullLevel}>
-                        LEVEL {engagementLevel.toUpperCase()}
-                      </Text>
-                    </View>
-                    <Globe size={18} color={PRIMARY_COLOR} />
-                  </View>
-                </AppCard>
-              </TouchableOpacity>
-            ) : (
-              <>
             <View style={styles.statsTopGrid}>
               <TouchableOpacity
                 style={styles.scorePanelPressable}
@@ -1191,9 +1003,13 @@ export default function ProfileScreenContent() {
               <Text style={styles.recordSectionLabel}>Career Overview</Text>
               <View style={styles.careerOverviewRow}>
                 {[
+                  // Exact mirror of frontend CareerSection.js:16-21 — no extra
+                  // fallbacks to card.total_games / stats.total_games. Those fields
+                  // count win+loss+draw rows and inflate the "Matches" stat well
+                  // beyond what the backend's `matches_played` field represents.
                   { value: `${career?.training_hours ?? 0}h`, label: "Training", Icon: Clock },
                   { value: career?.organizations?.length ?? 0, label: "Orgs", Icon: Users },
-                  { value: career?.matches_played ?? card?.total_games ?? stats?.total_games ?? 0, label: "Matches", Icon: Swords },
+                  { value: career?.matches_played || 0, label: "Matches", Icon: Swords },
                   { value: career?.tournaments_played ?? 0, label: "Events", Icon: Medal },
                 ].map((item, index) => (
                   <View
@@ -1210,8 +1026,6 @@ export default function ProfileScreenContent() {
                 ))}
               </View>
             </AppCard>
-              </>
-            )}
           </View>
         )}
 
@@ -1224,100 +1038,56 @@ export default function ProfileScreenContent() {
           </View>
         )}
 
-        {/* Badges Tab — mirrors frontend AchievementsSection.js
-            (2-col grid, 9 icon types, per-badge color tint, Joined footer) */}
+        {/* Badges Tab */}
         {visitedTabs.has("badges") && (
           <View style={[styles.tabPageFill, activeTab === "badges" ? null : styles.hiddenTabPage]}>
-            {badges.length === 0 ? (
-              <View style={styles.badgesEmptyWrap}>
-                <View style={styles.badgesEmptyIcon}>
-                  <Award size={28} color="#94A3B8" />
-                </View>
-                <Text style={styles.badgesEmptyTitle}>No badges earned yet</Text>
-                <Text style={styles.badgesEmptyText}>
-                  Play matches and stay active to unlock achievements
-                </Text>
-              </View>
-            ) : (
-              <>
-                <View style={styles.badgesHeaderRow}>
-                  <View style={styles.badgesHeaderLeft}>
-                    <Award size={14} color={PRIMARY_COLOR} />
-                    <Text style={styles.badgesEyebrow}>Achievements</Text>
-                  </View>
-                  <Text style={styles.badgesCount}>{badges.length} earned</Text>
-                </View>
-
-                <View style={styles.badgesGrid}>
-                  {badges.map((item, index) => {
-                    const Icon = BADGE_ICONS[item.icon] || Trophy;
-                    const cfg = BADGE_CONFIG[item.name] || DEFAULT_BADGE_CONFIG;
-                    return (
-                      <View
-                        key={`${item.name}-${index}`}
-                        style={[styles.badgeCard, { backgroundColor: cfg.bg, borderColor: cfg.border }]}
-                      >
-                        <View
-                          style={[styles.badgeCardIconBox, { backgroundColor: cfg.bg, borderColor: cfg.border }]}
-                        >
-                          <Icon size={22} color={cfg.color} />
-                        </View>
-                        <View style={styles.badgeCardBody}>
-                          <Text style={styles.badgeCardTitle} numberOfLines={1}>
-                            {item.name}
-                          </Text>
-                          {item.description ? (
-                            <Text style={styles.badgeCardDesc} numberOfLines={2}>
-                              {item.description}
-                            </Text>
-                          ) : null}
-                        </View>
-                        <BadgeCheck size={18} color={cfg.color} style={{ opacity: 0.6 }} />
-                      </View>
-                    );
-                  })}
-                </View>
-              </>
-            )}
-
-            {!!joinedBadgeText && (
-              <View style={styles.badgesJoinedFooter}>
-                <Text style={styles.badgesJoinedText}>Joined {joinedBadgeText}</Text>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* Docs Tab (venue_owner only) — frontend renders VerificationBanner
-            ABOVE the upload form (pending_review / rejected / not_uploaded). */}
-        {visitedTabs.has("documents") && (
-          <View style={[styles.tabPageFill, activeTab === "documents" ? null : styles.hiddenTabPage]}>
-            <VerificationBanner user={user} />
             <AppCard style={styles.sectionCard}>
-              <DocumentsUploadTab />
+              <View style={styles.badgesHeaderRow}>
+                <View style={styles.badgesHeaderLeft}>
+                  <Award size={14} color={PRIMARY_COLOR} />
+                  <Text style={styles.badgesEyebrow}>Achievements</Text>
+                </View>
+                <Text style={styles.badgesCount}>{badges.length} earned</Text>
+              </View>
+              {badges.length === 0 ? (
+                <View style={styles.emptyBadgeState}>
+                  <View style={styles.emptyBadgeIcon}>
+                    <Award size={24} color="#94A3B8" />
+                  </View>
+                  <Text style={styles.emptyBadgeTitle}>No badges earned yet</Text>
+                  <Text style={styles.emptyBadgeText}>Play matches and stay active to unlock achievements.</Text>
+                </View>
+              ) : (
+                badges.map((item, index) => (
+                  <View key={`${item.name}-${index}`} style={styles.badgeRow}>
+                    <View style={styles.badgeIcon}>
+                      {item.icon === "shield" ? (
+                        <Shield size={20} color={PRIMARY_COLOR} />
+                      ) : (
+                        <Award size={20} color={PRIMARY_COLOR} />
+                      )}
+                    </View>
+                    <View style={styles.badgeBody}>
+                      <Text style={styles.badgeTitle}>{item.name}</Text>
+                      <Text style={styles.badgeMeta}>
+                        {item.description || "Achievement unlocked on Lobbi."}
+                      </Text>
+                    </View>
+                    <BadgeCheck size={18} color={PRIMARY_COLOR} />
+                  </View>
+                ))
+              )}
+              {!!joinedBadgeText && <Text style={styles.badgesFooterText}>Joined {joinedBadgeText}</Text>}
             </AppCard>
           </View>
         )}
 
-        {/* Venues Tab (venue_owner only) — frontend VenuesList:
-            per-venue name + city + status + sports + 3 stat boxes. */}
-        {visitedTabs.has("venues") && (
-          <View style={[styles.tabPageFill, activeTab === "venues" ? null : styles.hiddenTabPage]}>
-            <OwnerVenuesList
-              ownerVenues={ownerVenues}
-              venueAnalytics={ownerVenueAnalytics}
-              reviewSummaries={ownerReviewSummaries}
-            />
-          </View>
-        )}
-
-        {/* Reviews Tab (venue_owner only) — frontend ReviewsList */}
-        {visitedTabs.has("reviews") && (
-          <View style={[styles.tabPageFill, activeTab === "reviews" ? null : styles.hiddenTabPage]}>
-            <OwnerReviewsList
-              ownerVenues={ownerVenues}
-              reviewSummaries={ownerReviewSummaries}
-            />
+        {/* Finance Tab (venue_owner only) */}
+        {visitedTabs.has("finance") && (
+          <View style={[styles.tabPageFill, activeTab === "finance" ? null : styles.hiddenTabPage]}>
+            <AppCard style={styles.sectionCard}>
+              <FinancePanel />
+            </AppCard>
           </View>
         )}
 
@@ -2279,222 +2049,11 @@ export default function ProfileScreenContent() {
           </View>
         </View>
       </Modal>
-
-      {/* venue_owner More dropdown — anchored popover under the More tab.
-          Modal has transparent overlay (no dim) so the screen stays visible;
-          the card is positioned absolutely using the More button's screen
-          coords captured via measureInWindow. */}
-      <Modal
-        visible={showMoreMenu}
-        transparent
-        animationType="none"
-        onRequestClose={() => setShowMoreMenu(false)}
-      >
-        <Pressable
-          style={StyleSheet.absoluteFillObject}
-          onPress={() => setShowMoreMenu(false)}
-        />
-        <View
-          pointerEvents="box-none"
-          style={[
-            styles.moreMenuAnchor,
-            {
-              top: moreAnchor.y + moreAnchor.height + 6,
-              right: Math.max(8, SCREEN_WIDTH - (moreAnchor.x + moreAnchor.width)),
-            },
-          ]}
-        >
-          <View style={styles.moreMenuCard}>
-            {moreTabs.map((item, idx) => {
-              const active = activeTab === item.key;
-              const isLast = idx === moreTabs.length - 1;
-              const Icon = item.IconComponent;
-              return (
-                <TouchableOpacity
-                  key={item.key}
-                  activeOpacity={0.7}
-                  onPress={() => {
-                    setShowMoreMenu(false);
-                    handleTabChange(item.key);
-                  }}
-                  style={[styles.moreMenuItem, !isLast && styles.moreMenuItemBorder, active && styles.moreMenuItemActive]}
-                >
-                  {Icon ? <Icon size={16} color={active ? PRIMARY_COLOR : "#475569"} /> : null}
-                  <Text style={[styles.moreMenuLabel, active && styles.moreMenuLabelActive]}>
-                    {item.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-      </Modal>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  /* More dropdown (venue_owner) — anchored popover (no full-screen dim) */
-  moreMenuAnchor: {
-    position: "absolute",
-    // top + right set inline based on measureInWindow coords
-  },
-  moreMenuCard: {
-    minWidth: 180,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    paddingVertical: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.16,
-    shadowRadius: 18,
-    elevation: 8,
-    borderWidth: 1,
-    borderColor: "#F1F5F9",
-  },
-  moreMenuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  moreMenuItemBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
-  },
-  moreMenuItemActive: {
-    backgroundColor: "#F0FDF4",
-  },
-  moreMenuLabel: {
-    fontSize: 14,
-    color: "#0F172A",
-    fontWeight: "600",
-  },
-  moreMenuLabelActive: {
-    color: PRIMARY_COLOR,
-    fontWeight: "700",
-  },
-
-  /* venue_owner Stats — single full-width Engagement card */
-  engagementFullPressable: { width: "100%" },
-  engagementFullCard: {
-    padding: 18,
-    borderWidth: 1.5,
-    borderColor: `${PRIMARY_COLOR}55`,
-    borderRadius: 18,
-  },
-  engagementFullRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-  },
-  engagementFullText: { flex: 1 },
-  engagementFullTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F172A",
-    marginBottom: 4,
-  },
-  engagementFullLevel: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: PRIMARY_COLOR,
-    letterSpacing: 1.5,
-  },
-
-  /* venue_owner role pill (replaces Beginner/Pro/Elite tier for venue owners) */
-  venueOwnerPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 9999,
-    borderWidth: 1,
-    backgroundColor: "rgba(245, 158, 11, 0.12)",
-    borderColor: "rgba(245, 158, 11, 0.35)",
-  },
-  venueOwnerPillText: {
-    fontSize: 10,
-    fontWeight: "900",
-    color: "#D97706",
-    letterSpacing: 1.2,
-  },
-
-  /* Badges tab — 2-col grid (mirrors frontend AchievementsSection) */
-  badgesEmptyWrap: {
-    paddingHorizontal: 20,
-    paddingVertical: 56,
-    alignItems: "center",
-  },
-  badgesEmptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
-    backgroundColor: "rgba(148, 163, 184, 0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(148, 163, 184, 0.10)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 14,
-  },
-  badgesEmptyTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "rgba(100, 116, 139, 0.55)",
-    marginBottom: 4,
-  },
-  badgesEmptyText: {
-    fontSize: 12,
-    color: "rgba(100, 116, 139, 0.45)",
-    textAlign: "center",
-  },
-  badgesGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  badgeCard: {
-    flexBasis: "100%",
-    minWidth: 0,
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  badgeCardIconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  badgeCardBody: { flex: 1, minWidth: 0 },
-  badgeCardTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#0F172A",
-    marginBottom: 2,
-  },
-  badgeCardDesc: {
-    fontSize: 12,
-    color: "#64748B",
-    lineHeight: 16,
-  },
-  badgesJoinedFooter: {
-    paddingHorizontal: 24,
-    paddingVertical: 28,
-    alignItems: "center",
-  },
-  badgesJoinedText: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1.5,
-    color: "rgba(100, 116, 139, 0.4)",
-    textTransform: "uppercase",
-  },
-
   content: {
     padding: 16,
     gap: 16,

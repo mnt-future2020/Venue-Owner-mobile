@@ -8,16 +8,14 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
-import { LayoutDashboard, ClipboardList, Wallet, User } from "lucide-react-native";
+import { LayoutDashboard, ClipboardList, Wallet, Rss, MessageCircleMore } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PRIMARY_COLOR, FONTS } from "../constants/theme";
 import TabRefreshContext from "../context/TabRefreshContext";
 
 // === Sizing
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const TAB_COUNT = 4;
 const BAR_WIDTH = SCREEN_WIDTH;
-const TAB_WIDTH = BAR_WIDTH / TAB_COUNT;
 const BAR_TOTAL_HEIGHT = 75;
 const ACTIVE_CIRCLE_SIZE = 42;
 const ACTIVE_ICON_SIZE = 15;
@@ -67,11 +65,14 @@ function createNotchStroke(width) {
 }
 
 const TABS = [
-  { name: "dashboard", label: "Dashboard", Icon: LayoutDashboard },
+  { name: "feed", label: "Feed", Icon: Rss },
   { name: "venues", label: "Venue Mgmt", Icon: ClipboardList },
+  { name: "dashboard", label: "Dashboard", Icon: LayoutDashboard },
   { name: "finance", label: "Finance", Icon: Wallet },
-  { name: "profile", label: "Profile", Icon: User },
+  { name: "chat", label: "Chat", Icon: MessageCircleMore },
 ];
+const TAB_COUNT = TABS.length;
+const TAB_WIDTH = BAR_WIDTH / TAB_COUNT;
 
 const TabItem = memo(function TabItem({ tab, index, onPress, progress, activeIndex }) {
   const iconAnimStyle = useAnimatedStyle(() => {

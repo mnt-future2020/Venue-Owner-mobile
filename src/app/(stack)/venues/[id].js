@@ -1122,9 +1122,9 @@ export function SlotsTab({ venueId }) {
               </View>
             </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={{ flexDirection: "row" }}>
+              {/* Frozen Time column — stays put while turf columns scroll */}
               <View>
-                {/* Header row */}
                 <View style={tabStyles.gridHeaderRow}>
                   <View
                     style={[
@@ -1134,6 +1134,50 @@ export function SlotsTab({ venueId }) {
                   >
                     <Text style={tabStyles.gridHeaderLabel}>Time</Text>
                   </View>
+                </View>
+                {timeSlots.map((time, rowIdx) => {
+                  const rowIsPast =
+                    isPastDate ||
+                    (selectedDate === today &&
+                      !time.is_next_day &&
+                      time.start_time < nowHHMM);
+                  return (
+                    <View
+                      key={`time-${time.start_time}-${rowIdx}`}
+                      style={tabStyles.gridRow}
+                    >
+                      <View
+                        style={[
+                          tabStyles.timeColCell,
+                          tabStyles.gridDataCell,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            tabStyles.timeLabel,
+                            rowIsPast && tabStyles.timeLabelPast,
+                          ]}
+                        >
+                          {fmt12h(time.start_time)}
+                        </Text>
+                        {time.is_next_day ? (
+                          <View style={tabStyles.nextDayBadge}>
+                            <Text style={tabStyles.nextDayBadgeText}>
+                              +1 Day
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+
+              {/* Horizontally scrollable turf columns */}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
+              <View>
+                {/* Header row */}
+                <View style={tabStyles.gridHeaderRow}>
                   {turfs.map((t) => {
                     const iconName = t.sport
                       ? getSportIconName(String(t.sport).toLowerCase())
@@ -1188,28 +1232,6 @@ export function SlotsTab({ venueId }) {
                       key={`${time.start_time}-${rowIdx}`}
                       style={tabStyles.gridRow}
                     >
-                      <View
-                        style={[
-                          tabStyles.timeColCell,
-                          tabStyles.gridDataCell,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            tabStyles.timeLabel,
-                            rowIsPast && tabStyles.timeLabelPast,
-                          ]}
-                        >
-                          {fmt12h(time.start_time)}
-                        </Text>
-                        {time.is_next_day ? (
-                          <View style={tabStyles.nextDayBadge}>
-                            <Text style={tabStyles.nextDayBadgeText}>
-                              +1 Day
-                            </Text>
-                          </View>
-                        ) : null}
-                      </View>
                       {turfs.map((t) => {
                         const slot =
                           slotMap[`${time.start_time}-${t.turf_number}`];
@@ -1348,7 +1370,8 @@ export function SlotsTab({ venueId }) {
                   );
                 })}
               </View>
-            </ScrollView>
+              </ScrollView>
+            </View>
           </View>
         )}
       </ScrollView>
@@ -2792,6 +2815,7 @@ const tabStyles = StyleSheet.create({
   },
   gridRow: {
     flexDirection: "row",
+    minHeight: 78,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(229, 231, 235, 0.5)",
   },

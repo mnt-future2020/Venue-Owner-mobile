@@ -1,0 +1,40 @@
+# EAS Build ignore file — overrides .gitignore for the upload step.
+# IMPORTANT: .env MUST be uploaded so react-native-dotenv can inline
+# API_URL at build time. .gitignore excludes .env (correct for git),
+# but EAS must still see it.
+
+# dependencies
+node_modules/
+
+# Expo build output
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native generated dirs
+/ios
+/android
+
+# Metro / debug
+.metro-health-check*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+
+# secrets we never want uploaded
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.pem
+
+# typescript
+*.tsbuildinfo
+
+# git
+.git/

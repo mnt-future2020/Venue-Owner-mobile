@@ -47,15 +47,31 @@ function LocationPickerModal({ visible, onClose }) {
         setDetecting(false);
         return;
       }
-      const loc = await ExpoLocation.getCurrentPositionAsync({});
-      const { latitude, longitude } = loc.coords;
-      const geo = await playerService.reverseGeocode(latitude, longitude);
 
-      const city = geo?.city || geo?.locality || "";
-      const displayName =
-        geo?.display_name ||
-        (geo?.area ? `${geo.area}, ${city}` : city) ||
-        "My Location";
+      // Mirror frontend LocationContext.detectLocation (LocationContext.js:138-174):
+      //   navigator.geolocation.getCurrentPosition(cb, err, { enableHighAccuracy: true })
+      // Accuracy.High = GPS-level precision → same coordinates the web app gets → the
+      // reverse-geocode resolves to the same neighborhood (e.g. "Iyer Bungalow, Madurai"
+      // instead of an adjacent cell-tower-centroid neighborhood).
+      const loc = await ExpoLocation.getCurrentPositionAsync({
+        accuracy: ExpoLocation.Accuracy.High,
+      });
+
+      const { latitude, longitude, accuracy } = loc.coords;
+      const geo = await playerService.reverseGeocode(latitude, longitude);
+      if (__DEV__) {
+        console.log("[Location] GPS coords:", { latitude, longitude, accuracy });
+        console.log("[Location] reverse-geocode response:", geo);
+      }
+
+      // Exact mirror of frontend parsing (LocationContext.js:150-151):
+      //   const { display_name, city } = res.data;
+      //   const name = display_name || city || "my-location";
+      // No `geo.area` or `geo.locality` fallbacks — those were mobile-only additions
+      // that built a different label (e.g. "Muneeswarar Nagar, Madurai") when the
+      // backend's display_name was missing or fell back early.
+      const city = geo?.city || "";
+      const displayName = geo?.display_name || city || "My Location";
 
       const locationData = {
         city,
@@ -185,8 +201,11 @@ function LocationPickerModal({ visible, onClose }) {
               </Text>
               <TouchableOpacity
                 onPress={async () => {
+                  // Match frontend NavbarLocationPicker.handleClear (line 126-130):
+                  // clear the stored location but KEEP the modal open so the user can
+                  // immediately search for a new one or tap "Use my current location".
+                  // Previously this also closed the modal which forced an extra tap.
                   await clearLocation();
-                  onClose();
                 }}
                 style={styles.currentLocationClear}
               >
