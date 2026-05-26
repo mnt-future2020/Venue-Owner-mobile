@@ -40,7 +40,7 @@ import useCachedResource from "../../hooks/useCachedResource";
 import { CACHE_TTL } from "../../services/queryCache";
 import TabRefreshContext from "../../context/TabRefreshContext";
 import useNotificationBell from "../../hooks/useNotificationBell";
-// import SwipeTabContext from "../../context/SwipeTabContext"; // disabled with swipeable pager
+import SwipeTabContext from "../../context/SwipeTabContext";
 
 const fmtINR = (n) => `₹${(Number(n) || 0).toLocaleString("en-IN")}`;
 
@@ -68,9 +68,8 @@ const maskAcct = (str) => {
 };
 
 export default function FinanceScreen() {
-  // Swipeable pager guard — commented out while plain Tabs is in use.
-  // const { inPager } = useContext(SwipeTabContext);
-  // if (!inPager) return null;
+  const { inPager } = useContext(SwipeTabContext);
+  if (!inPager) return null;
 
   const router = useRouter();
   const { refreshSignals } = useContext(TabRefreshContext);

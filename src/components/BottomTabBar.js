@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useContext, useEffect, useMemo } from "react";
-import { Dimensions, Platform, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Animated, {
   interpolate,
   useAnimatedStyle,
@@ -8,10 +8,23 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
-import { LayoutDashboard, ClipboardList, Wallet, Rss, MessageCircleMore } from "lucide-react-native";
+import { LayoutDashboard, ClipboardList, Wallet, Rss } from "lucide-react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PRIMARY_COLOR, FONTS } from "../constants/theme";
 import TabRefreshContext from "../context/TabRefreshContext";
+import { useWishlist } from "../context/WishlistContext";
+
+// renderIcon — supports both Lucide and Ionicons (mobile/BottomTabBar parity).
+// Some tabs use Ionicons because their outlined glyph paints with heavier
+// weight than the equivalent Lucide icon at small bottom-bar sizes, which
+// matches the mobile player app exactly (chat tab in particular).
+function renderIcon(tab, color, size, strokeWidth = 2.15) {
+  if (tab.LucideIcon) {
+    return <tab.LucideIcon size={size} color={color} strokeWidth={strokeWidth} />;
+  }
+  return <Ionicons name={tab.ionicon} size={size} color={color} />;
+}
 
 // === Sizing
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -65,16 +78,18 @@ function createNotchStroke(width) {
 }
 
 const TABS = [
-  { name: "feed", label: "Feed", Icon: Rss },
-  { name: "venues", label: "Venue Mgmt", Icon: ClipboardList },
-  { name: "dashboard", label: "Dashboard", Icon: LayoutDashboard },
-  { name: "finance", label: "Finance", Icon: Wallet },
-  { name: "chat", label: "Chat", Icon: MessageCircleMore },
+  { name: "feed", label: "Feed", LucideIcon: Rss },
+  { name: "venues", label: "Venue Mgmt", LucideIcon: ClipboardList },
+  { name: "dashboard", label: "Dashboard", LucideIcon: LayoutDashboard },
+  { name: "finance", label: "Finance", LucideIcon: Wallet },
+  // Chat uses Ionicons chatbubble-ellipses-outline (exact mobile parity —
+  // paints with heavier weight than Lucide MessageCircleMore at size 23).
+  { name: "chat", label: "Chat", ionicon: "chatbubble-ellipses-outline" },
 ];
 const TAB_COUNT = TABS.length;
 const TAB_WIDTH = BAR_WIDTH / TAB_COUNT;
 
-const TabItem = memo(function TabItem({ tab, index, onPress, progress, activeIndex }) {
+const TabItem = memo(function TabItem({ tab, index, onPress, progress, activeIndex, badge }) {
   const iconAnimStyle = useAnimatedStyle(() => {
     if (activeIndex < 0) return { opacity: 1 };
     const dist = Math.abs(progress.value - index);
@@ -88,8 +103,6 @@ const TabItem = memo(function TabItem({ tab, index, onPress, progress, activeInd
     return { color: dist < 0.5 ? ACCENT : TEXT_IDLE };
   });
 
-  const Icon = tab.Icon;
-
   return (
     <TouchableOpacity
       activeOpacity={0.92}
@@ -101,8 +114,13 @@ const TabItem = memo(function TabItem({ tab, index, onPress, progress, activeInd
       <View style={styles.tabButtonInner}>
         <View style={styles.iconWrap}>
           <Animated.View style={iconAnimStyle}>
-            <Icon size={23} color={ICON_IDLE} strokeWidth={2.15} />
+            {renderIcon(tab, ICON_IDLE, 23, 2.15)}
           </Animated.View>
+          {badge > 0 ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{badge > 9 ? "9+" : String(badge)}</Text>
+            </View>
+          ) : null}
         </View>
         <Animated.Text style={[styles.tabLabel, labelAnimStyle]} numberOfLines={1}>
           {tab.label}
@@ -117,10 +135,9 @@ const FloatingIconLayer = memo(function FloatingIconLayer({ tab, index, progress
     const dist = Math.abs(progress.value - index);
     return { opacity: interpolate(dist, [0, 0.5], [1, 0], "clamp"), position: "absolute" };
   });
-  const Icon = tab.Icon;
   return (
     <Animated.View style={style}>
-      <Icon size={ACTIVE_ICON_SIZE} color={WHITE} strokeWidth={2.5} />
+      {renderIcon(tab, WHITE, ACTIVE_ICON_SIZE, 2.5)}
     </Animated.View>
   );
 });
@@ -167,6 +184,7 @@ export default function BottomTabBar({
   const insets = useSafeAreaInsets();
   const fallbackProgress = useSharedValue(0);
   const { triggerRefresh } = useContext(TabRefreshContext);
+  const { wishlistCount } = useWishlist();
 
   const tabOrder = useMemo(() => state?.routes?.map((r) => r.name) || [], [state]);
 
@@ -277,6 +295,7 @@ export default function BottomTabBar({
               onPress={handlePress}
               progress={progress}
               activeIndex={resolvedActiveIndex}
+              badge={tab.name === "chat" ? wishlistCount : 0}
             />
           ))}
         </View>
@@ -347,11 +366,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     position: "relative",
     overflow: "visible",
-    shadowColor: ACCENT,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
-    elevation: 6,
   },
   tabRow: {
     position: "absolute",
@@ -381,11 +395,38 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,
+    position: "relative",
   },
   tabLabel: {
     fontSize: 10,
     lineHeight: 13,
     fontFamily: FONTS.bodyMedium,
     color: TEXT_IDLE,
+    includeFontPadding: false,
+    textAlign: "center",
+  },
+  /* Unread badge — matches mobile BottomTabBar (chat tab overlay) */
+  badge: {
+    position: "absolute",
+    top: -4,
+    right: -7,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#EF4444",
+    borderWidth: 1.5,
+    borderColor: WHITE,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 40,
+  },
+  badgeText: {
+    color: WHITE,
+    fontSize: 8,
+    lineHeight: 8,
+    fontFamily: FONTS.bodyBold,
+    textAlign: "center",
+    includeFontPadding: false,
   },
 });

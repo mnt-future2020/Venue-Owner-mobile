@@ -8,6 +8,7 @@ import {
   AppState,
   Dimensions,
   Modal,
+  PanResponder,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -1013,15 +1014,54 @@ export default function ChatScreenContent() {
     return filteredUnified.filter((item) => item._type !== "group");
   }, [filteredUnified, requests]);
 
+  // Set while a programmatic scrollToOffset is mid-flight so the live scroll
+  // listener doesn't fight the tap's intended target. Without this, snapping
+  // through an intermediate page (e.g. Groups → Requests passes through index 1
+  // → 2 with floor+0.18 bias) causes setActiveTab to bounce to the in-between
+  // tab for a frame before settling, which looks like a 1-sec "animate back".
+  const programmaticScrollRef = useRef(false);
+
   const handleMainTabPress = useCallback((tabKey) => {
     const nextIndex = MAIN_CHAT_TABS.findIndex((item) => item.key === tabKey);
     if (nextIndex < 0) return;
     activeTabIndexRef.current = nextIndex;
     activeTabRef.current = tabKey;
     setActiveTab(tabKey);
+    programmaticScrollRef.current = true;
     mainPagerRef.current?.scrollToOffset?.({ offset: nextIndex * pageWidth, animated: true });
   }, [pageWidth]);
 
+
+  // Edge-swipe PanResponder — when user is on All Chats sub-tab (index 0) and
+  // drags right with enough force, escape to the parent tab on the LEFT
+  // (Finance). Activates ONLY for right-swipe (dx > 0) on sub-tab 0, so
+  // FlashList vertical scroll and other sub-tabs (Groups/Requests/Discover)
+  // are unaffected.
+  const edgeSwipeResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onStartShouldSetPanResponderCapture: () => false,
+        onMoveShouldSetPanResponder: (_e, g) => {
+          if (activeTabIndexRef.current !== 0) return false;
+          // Only claim horizontal-right swipes (dx > 16) that aren't dominated
+          // by vertical movement (so FlashList still scrolls normally).
+          return g.dx > 16 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5;
+        },
+        onMoveShouldSetPanResponderCapture: (_e, g) => {
+          if (activeTabIndexRef.current !== 0) return false;
+          return g.dx > 16 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5;
+        },
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderRelease: (_e, g) => {
+          if (g.dx > 50 || g.vx > 0.25) {
+            goToTab(3); // Finance is the parent tab to the LEFT of Chat
+          }
+        },
+        onPanResponderTerminate: () => {},
+      }),
+    [goToTab],
+  );
 
   // Track drag on internal pager to detect edge swipe to parent tab
   const dragStartXRef = useRef(null);
@@ -1050,6 +1090,8 @@ export default function ChatScreenContent() {
     activeTabIndexRef.current = nextIndex;
     activeTabRef.current = nextTab;
     setActiveTab(nextTab);
+    // Tap-driven scroll has finished — let the live listener resume.
+    programmaticScrollRef.current = false;
   }, [pageWidth]);
 
   const handleMainPagerScroll = useMemo(
@@ -1058,6 +1100,10 @@ export default function ChatScreenContent() {
       {
         useNativeDriver: true,
         listener: (event) => {
+          // While a tap-driven scroll is in flight, don't override the
+          // already-set target tab — the in-flight scroll passes through
+          // intermediate page indexes and would flicker the active state.
+          if (programmaticScrollRef.current) return;
           const offsetX = event.nativeEvent.contentOffset.x || 0;
           const rawIndex = offsetX / pageWidth;
           const nextIndex = Math.min(
@@ -1258,8 +1304,12 @@ export default function ChatScreenContent() {
 
   const renderTabPage = useCallback(({ item: tab }) => {
     const tabData = getTabListData(tab.key);
+    // Attach edge-swipe responder ONLY to the All Chats (index 0) page.
+    // Right-swipe from this page escapes to the parent Finance tab.
+    const isFirstSubTab = tab.key === MAIN_CHAT_TABS[0]?.key;
+    const pageHandlers = isFirstSubTab ? edgeSwipeResponder.panHandlers : null;
     return (
-      <View style={tabPageStyle}>
+      <View style={tabPageStyle} {...pageHandlers}>
         <FlashList
           data={tabData}
           keyExtractor={conversationKeyExtractor}
@@ -1323,6 +1373,7 @@ export default function ChatScreenContent() {
     renderRequestBanner,
     renderRequestItem,
     tabPageStyle,
+    edgeSwipeResponder,
   ]);
 
   return (
@@ -1335,7 +1386,7 @@ export default function ChatScreenContent() {
         onLayout={onHeaderLayout}
         collapsable={false}
       >
-        <View style={[styles.headerBg, { paddingTop: sharedHeaderHeight || insets.top }]}>
+        <View style={[styles.headerBg, { paddingTop: sharedHeaderHeight || 0 }]}>
           {/* Header */}
           <View style={styles.header} onLayout={onStickyHeaderLayout}>
             <View style={styles.tabsHeaderRow} onLayout={(e) => setTabsHeaderWidth(e.nativeEvent.layout.width)}>
