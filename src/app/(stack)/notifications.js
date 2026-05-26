@@ -18,6 +18,10 @@ import {
   X as CloseIcon,
   Check as CheckIcon,
   CheckCheck,
+  MapPin,
+  Clock,
+  CheckCircle,
+  Zap,
 } from "lucide-react-native";
 import { PRIMARY_COLOR, FONTS } from "../../constants/theme";
 import notificationsService from "../../services/notificationsService";
@@ -30,28 +34,30 @@ import toast from "../../utils/toast";
 import Header from "../../components/Header";
 import EmptyState from "../../components/ui/EmptyState";
 
-// Filter chips — mirrors frontend NotificationsPage filter set
+// Per product request: keep only the "All" chip visible. Other filters are
+// commented out (not deleted) so we can restore the full set later if needed.
+// Original order matched frontend NotificationsPage.js:178-183.
 const FILTERS = [
   { key: "all", label: "All" },
-  { key: "unread", label: "Unread" },
-  { key: "slot_available", label: "Slot Alerts" },
-  { key: "booking", label: "Bookings" },
-  { key: "game_completed", label: "Completed" },
+  // { key: "unread", label: "Unread" },
+  // { key: "slot_available", label: "Slot Alerts" },
+  // { key: "booking", label: "Bookings" },
+  // { key: "game_completed", label: "Completed" },
 ];
 
-// Type → Ionicons name + colour (matches frontend's Lucide mapping
-// 1:1 conceptually: location / time / trophy / generic bell)
-function iconForType(type) {
+// Exact mirror of frontend getIcon (NotificationsPage.js:121-133) — same lucide icons
+// and same per-type colours.
+function getIcon(type, size = 18) {
   switch (type) {
     case "slot_available":
-      return "location-outline";
+      return <MapPin size={size} color="#4ADE80" />;       // green-400
     case "booking":
     case "booking_confirmed":
-      return "time-outline";
+      return <Clock size={size} color="#34D399" />;        // brand-400
     case "game_completed":
-      return "trophy-outline";
+      return <CheckCircle size={size} color="#34D399" />;  // emerald-400
     default:
-      return "notifications-outline";
+      return <Zap size={size} color="#FBBF24" />;          // amber-400
   }
 }
 
@@ -102,7 +108,6 @@ function fmtDateLabel(yyyymmdd) {
 }
 
 function NotificationRow({ item, onPress, onMarkRead }) {
-  const iconColor = item.is_read ? "#94A3B8" : PRIMARY_COLOR;
   return (
     <TouchableOpacity
       activeOpacity={0.85}
@@ -115,7 +120,7 @@ function NotificationRow({ item, onPress, onMarkRead }) {
           { backgroundColor: item.is_read ? "#F1F5F9" : "#ECFDF5" },
         ]}
       >
-        <Ionicons name={iconForType(item.type)} size={18} color={iconColor} />
+        {getIcon(item.type, 18)}
       </View>
       <View style={styles.cardBody}>
         <View style={styles.titleRow}>
@@ -134,6 +139,9 @@ function NotificationRow({ item, onPress, onMarkRead }) {
         ) : null}
         <Text style={styles.time}>{fmtTime(item.created_at)}</Text>
       </View>
+      {/* Matches frontend (NotificationsPage.js:323-335): only the "mark read" button
+          appears for unread rows. Read rows show NOTHING on the right side — the
+          chevron arrow was a mobile-only addition that didn't exist on the web. */}
       {!item.is_read ? (
         <TouchableOpacity
           style={styles.markBtn}
@@ -143,11 +151,7 @@ function NotificationRow({ item, onPress, onMarkRead }) {
         >
           <CheckIcon size={14} color={PRIMARY_COLOR} strokeWidth={2.8} />
         </TouchableOpacity>
-      ) : (
-        <View style={styles.chevWrap}>
-          <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
-        </View>
-      )}
+      ) : null}
     </TouchableOpacity>
   );
 }

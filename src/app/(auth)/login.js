@@ -66,7 +66,7 @@ export default function LoginScreen() {
       const ok = await handleOwnerLoginSuccess(res);
       if (ok) {
         toast.success("Welcome back!", "");
-        safeReplace(router, "/(tabs)/dashboard");
+        safeReplace(router, "/(tabs)/feed");
       }
     } catch (err) {
       if (err?.response?.status === 429) {
@@ -88,7 +88,7 @@ export default function LoginScreen() {
       const ok = await handleOwnerLoginSuccess(res);
       if (ok) {
         toast.success("Dev Login", "Logged in as Venue Owner");
-        safeReplace(router, "/(tabs)/dashboard");
+        safeReplace(router, "/(tabs)/feed");
       }
     } catch (err) {
       toast.error("Dev Login Failed", err?.response?.data?.detail || "Dev login is disabled.");

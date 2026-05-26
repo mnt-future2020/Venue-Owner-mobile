@@ -42,7 +42,25 @@ export const SPORT_GRADIENTS = {
   default: ["#059669", "#047857"],
 };
 
-export const STORY_COLORS = ["#059669", "#3B82F6", "#A855F7", "#EA580C", "#06B6D4", "#F43F5E"];
+// Story background palette — exact mirror of frontend SocialFeedPage STORY_COLORS
+// (Tailwind classes `from-X to-Y` rendered as native LinearGradient pairs). Each
+// entry's `key` matches the frontend string so a story posted from web AND mobile
+// renders with the same gradient on both platforms (the backend stores `bg_color`
+// as the Tailwind class string verbatim).
+export const STORY_GRADIENTS = [
+  { key: "from-green-500 to-brand-600",  colors: ["#22C55E", "#059669"] },
+  { key: "from-blue-500 to-indigo-600",  colors: ["#3B82F6", "#4F46E5"] },
+  { key: "from-purple-500 to-pink-600",  colors: ["#A855F7", "#DB2777"] },
+  { key: "from-orange-500 to-red-600",   colors: ["#F97316", "#DC2626"] },
+  { key: "from-cyan-500 to-blue-600",    colors: ["#06B6D4", "#2563EB"] },
+  { key: "from-rose-500 to-pink-600",    colors: ["#F43F5E", "#DB2777"] },
+];
+
+export function getStoryGradientColors(key) {
+  return STORY_GRADIENTS.find((g) => g.key === key)?.colors || ["#22C55E", "#059669"];
+}
+
+export const STORY_COLORS = STORY_GRADIENTS.map((g) => g.colors[0]);
 
 export const COLORS = {
   primary: PRIMARY_COLOR,

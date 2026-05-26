@@ -24,6 +24,39 @@ export default function Index() {
     preloadGif();
   }, []);
 
+  // Preload feed data while splash plays — matches mobile/src/app/index.js exactly.
+  useEffect(() => {
+    if (!gifLoaded || !user) return;
+    const preloadFeedData = async () => {
+      try {
+        const { default: feedService } = await import("../services/feedService");
+        const { default: cacheService } = await import("../services/cacheService");
+
+        const [feedData, storiesData, engagementData, suggestedData] = await Promise.all([
+          feedService.getFeed("for_you").catch(() => ({ posts: [], cursor: null, has_more: false })),
+          feedService.getStories().catch(() => []),
+          feedService.getMyEngagement().catch(() => null),
+          Promise.all([
+            feedService.getSuggestedFollows().catch(() => []),
+            feedService.getRecommendedPlayers(10).catch(() => []),
+          ]).then(([suggestedFollows, recommendedPlayers]) =>
+            recommendedPlayers?.length ? recommendedPlayers : suggestedFollows
+          ).catch(() => []),
+        ]);
+
+        cacheService.setFeedData("for_you", feedData);
+        cacheService.setStories(storiesData);
+        cacheService.setEngagement(engagementData);
+        cacheService.setSuggested(suggestedData);
+        cacheService.setReady(true);
+        if (typeof cacheService.setPreloaded === "function") {
+          cacheService.setPreloaded(true);
+        }
+      } catch {}
+    };
+    preloadFeedData();
+  }, [gifLoaded, user]);
+
   useEffect(() => {
     if (gifLoaded) {
       const t = setTimeout(() => setShowSplash(false), SPLASH_DURATION_MS);
@@ -68,7 +101,7 @@ export default function Index() {
     return <Redirect href="/(auth)/login" />;
   }
 
-  return user ? <Redirect href="/(tabs)/dashboard" /> : <Redirect href="/(auth)/login" />;
+  return user ? <Redirect href="/(tabs)/feed" /> : <Redirect href="/(auth)/login" />;
 }
 
 const styles = StyleSheet.create({

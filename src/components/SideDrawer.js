@@ -14,8 +14,9 @@ import {
   LayoutDashboard,
   ClipboardList,
   Wallet,
-  User,
   LogOut,
+  Rss,
+  MessageCircleMore,
 } from "lucide-react-native";
 import { usePathname, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -28,10 +29,11 @@ const DRAWER_WIDTH = Math.min(SCREEN_WIDTH * 0.78, 320);
 
 // Owner navigation — icons match web sidebar exactly (Navbar.js venue_owner items)
 const MENU_ITEMS = [
-  { label: "Dashboard", route: "/(tabs)/dashboard", Icon: LayoutDashboard },
+  { label: "Feed", route: "/(tabs)/feed", Icon: Rss },
   { label: "Venue Mgmt", route: "/(tabs)/venues", Icon: ClipboardList },
+  { label: "Dashboard", route: "/(tabs)/dashboard", Icon: LayoutDashboard },
   { label: "Finance", route: "/(tabs)/finance", Icon: Wallet },
-  { label: "Profile", route: "/(tabs)/profile", Icon: User },
+  { label: "Chat", route: "/(tabs)/chat", Icon: MessageCircleMore },
 ];
 
 export default function SideDrawer({ visible, onClose, onLogout }) {

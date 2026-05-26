@@ -2,6 +2,21 @@ import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_URL as ENV_API_URL } from "@env";
 import { STORAGE_KEYS } from "../constants/storage";
+import toast from "../utils/toast";
+
+// Throttle network-error toasts — a single connectivity outage can fire dozens of failed
+// requests at once, we only want the user to see one "No internet" message.
+let lastNetworkErrorToastAt = 0;
+function notifyNetworkError(error) {
+  const now = Date.now();
+  if (now - lastNetworkErrorToastAt < 4000) return;
+  lastNetworkErrorToastAt = now;
+  const message =
+    error?.code === "ECONNABORTED"
+      ? "Request timed out. Please check your internet."
+      : "No internet connection. Please try again.";
+  toast.error(message);
+}
 
 const rawBase = ENV_API_URL || "http://localhost:8000";
 const API_BASE = rawBase.endsWith("/api") ? rawBase : `${rawBase}/api`;
@@ -68,6 +83,14 @@ api.interceptors.response.use(
       const url = `${original?.baseURL || ""}${original?.url || ""}`;
       const status = error.response?.status || "NetworkError";
       console.log(`[HTTP] ${status} ${method} ${url}`);
+    }
+
+    // Network failures (server unreachable, DNS error, request timeout, airplane mode etc.)
+    // have no `error.response`. Surface a single throttled toast so the user knows the
+    // request failed because of connectivity — the OfflineBanner already shows the
+    // persistent state, this toast handles the moment-of-action failure feedback.
+    if (!error.response && !error.config?._silentNetworkError) {
+      notifyNetworkError(error);
     }
 
     if (error.response?.status === 401 && !original?._retry && !isAuthCall) {

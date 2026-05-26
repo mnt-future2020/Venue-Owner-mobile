@@ -56,6 +56,7 @@ import AppCard from "../ui/AppCard";
 import PostsGrid from "../profile/PostsGrid";
 import FollowListSheet from "../profile/FollowListSheet";
 import EditProfileSheet from "../profile/EditProfileSheet";
+import ProfileSkeleton from "../skeletons/ProfileSkeleton";
 import playerService from "../../services/playerService";
 import coachingService from "../../services/coachingService";
 import socialService from "../../services/socialService";
@@ -468,39 +469,32 @@ export default function PlayerCardScreenContent({ onNameLoaded }) {
     return "Bench";
   }, [engagement]);
   const overallScore = card?.overall_score ?? 0;
-  const socialScore = engagement?.score || engagement?.engagement_score || 0;
-  const ratingValue =
-    card?.skill_rating ?? stats?.skill_rating ?? stats?.rating ?? 0;
-  const gamesPlayed =
-    card?.total_games ??
-    stats?.total_games ??
-    career?.total_games ??
-    career?.matches ??
-    0;
-  const bookingsCount =
-    card?.total_bookings ?? stats?.total_bookings ?? stats?.bookings ?? 0;
-  const wins = card?.wins ?? stats?.wins ?? career?.wins ?? 0;
-  const losses = card?.losses ?? stats?.losses ?? career?.losses ?? 0;
-  const draws = card?.draws ?? stats?.draws ?? career?.draws ?? 0;
+  // Exact mirror of frontend PlayerCardPage stat field reads — same source fields,
+  // same fallbacks (default skill rating 1500, no `stats`/`career` aliases). The
+  // mobile-only aliases were defensive but masked backend data inconsistencies and
+  // let stale fields override the canonical card values.
+  const socialScore = engagement?.score || 0;
+  const ratingValue = card?.skill_rating ?? user?.skill_rating ?? 1500;
+  const gamesPlayed = card?.total_games ?? user?.total_games ?? 0;
+  const bookingsCount = card?.total_bookings ?? 0;
+  const wins = card?.wins ?? 0;
+  const losses = card?.losses ?? 0;
+  const draws = card?.draws ?? 0;
   const matchTotal = Math.max(wins + losses + draws, 1);
-  const winRate = gamesPlayed > 0 ? Math.round((wins / gamesPlayed) * 100) : 0;
-  const reliablePct =
-    card?.reliability_score ??
-    card?.reliability ??
-    stats?.reliability ??
-    career?.reliability ??
-    0;
+  // Win rate — frontend PlayerCardPage.js:196-206: wins / (wins+losses+draws) * 100
+  const winRate = Math.round((wins / matchTotal) * 100);
+  const reliablePct = card?.reliability_score ?? 0;
   const winsPct = Math.round((wins / matchTotal) * 100);
   const lossesPct = Math.round((losses / matchTotal) * 100);
   const drawsPct = Math.max(0, 100 - winsPct - lossesPct);
-  const trainingValue = career?.training_hours ?? career?.training ?? 0;
-  const orgsValue =
-    career?.organizations_count ??
-    career?.orgs ??
-    career?.organizations?.length ??
-    0;
-  const matchesValue = career?.matches ?? gamesPlayed;
-  const eventsValue = career?.events ?? career?.tournaments ?? 0;
+  const trainingValue = career?.training_hours ?? 0;
+  // Exact mirror of frontend CareerSection.js:16-21 — same field names, same fallbacks.
+  // Removed mobile-only `organizations_count`/`orgs`/`matches`/`events`/`tournaments`
+  // aliases and the `gamesPlayed` fallback (which counted win+loss+draw rows and
+  // inflated the Matches stat beyond what the backend's `matches_played` represents).
+  const orgsValue = career?.organizations?.length ?? 0;
+  const matchesValue = career?.matches_played || 0;
+  const eventsValue = career?.tournaments_played ?? 0;
 
   useEffect(() => {
     const currentIndex = Math.max(
@@ -602,12 +596,7 @@ export default function PlayerCardScreenContent({ onNameLoaded }) {
   });
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={PRIMARY_COLOR} />
-        <Text style={styles.loadingText}>Loading profile...</Text>
-      </View>
-    );
+    return <ProfileSkeleton />;
   }
 
   if (!card) {
@@ -843,7 +832,6 @@ export default function PlayerCardScreenContent({ onNameLoaded }) {
                     </>
                   )}
                 </TouchableOpacity>
-                {/* Message button — currently disabled in venue app.
                 <TouchableOpacity
                   activeOpacity={0.9}
                   style={styles.actionButton}
@@ -852,7 +840,6 @@ export default function PlayerCardScreenContent({ onNameLoaded }) {
                   <MessageCircle size={14} color="#0F172A" />
                   <Text style={styles.actionLabel}>Message</Text>
                 </TouchableOpacity>
-                */}
                 {card.role === "coach" ? (
                   <TouchableOpacity
                     activeOpacity={0.9}

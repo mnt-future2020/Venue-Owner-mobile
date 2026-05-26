@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  ActionSheetIOS,
   ActivityIndicator,
-  Alert,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -16,7 +14,7 @@ import {
   View,
 } from "react-native";
 import { Image } from "expo-image";
-import { Camera, LogOut, Save, User, X } from "lucide-react-native";
+import { Camera, ImagePlus, LogOut, Save, Trash2, User, X } from "lucide-react-native";
 import uploadService from "../../services/uploadService";
 import { useAuth } from "../../context/AuthContext";
 import { mediaUrl } from "../../utils/media";
@@ -26,12 +24,14 @@ import authService from "../../services/authService";
 import coachingService from "../../services/coachingService";
 import { useWishlist } from "../../context/WishlistContext";
 import LogoutModal from "../ui/LogoutModal";
+import ActionSheetModal from "../ui/ActionSheetModal";
 import ImageCropModal from "./ImageCropModal";
 
 export default function EditProfileSheet({ visible, onClose, card, onSaved }) {
   const insets = useSafeAreaInsets();
   const { user, updateUser } = useAuth();
   const [showLogout, setShowLogout] = useState(false);
+  const [showPhotoSheet, setShowPhotoSheet] = useState(false);
   const { notifyChatRead } = useWishlist();
   const scrollRef = useRef(null);
   const fieldPositionsRef = useRef({});
@@ -235,35 +235,9 @@ export default function EditProfileSheet({ visible, onClose, card, onSaved }) {
     }
   };
 
-  const pickImage = () => {
-    const hasAvatar = !!(avatarUri || user?.avatar || newAvatarAsset?.uri);
-
-    if (Platform.OS === "ios") {
-      const options = hasAvatar
-        ? ["Cancel", "Take Photo", "Choose from Gallery", "Remove Photo"]
-        : ["Cancel", "Take Photo", "Choose from Gallery"];
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options, cancelButtonIndex: 0, destructiveButtonIndex: hasAvatar ? 3 : undefined },
-        (index) => {
-          if (index === 1) openCamera();
-          else if (index === 2) openGallery();
-          else if (index === 3 && hasAvatar) handleRemoveAvatar();
-        }
-      );
-      return;
-    }
-
-    // Android — use Alert as ActionSheet
-    const buttons = [
-      { text: "Take Photo", onPress: openCamera },
-      { text: "Choose from Gallery", onPress: openGallery },
-    ];
-    if (hasAvatar) {
-      buttons.push({ text: "Remove Photo", style: "destructive", onPress: handleRemoveAvatar });
-    }
-    buttons.push({ text: "Cancel", style: "cancel" });
-    Alert.alert("Change Profile Photo", "", buttons);
-  };
+  // Open the custom photo-source sheet (replaces both `Alert.alert` on Android and
+  // `ActionSheetIOS` on iOS with one styled modal that matches the rest of the app).
+  const pickImage = () => setShowPhotoSheet(true);
 
   const handleRemoveAvatar = () => {
     setAvatarUri("");
@@ -461,7 +435,7 @@ export default function EditProfileSheet({ visible, onClose, card, onSaved }) {
             <View style={styles.avatarInfo}>
               <Text style={styles.avatarName}>{name || user?.name || "Player"}</Text>
               <Text style={styles.avatarMeta}>{metaText}</Text>
-              <View style={styles.avatarActionsRow}>
+              {/* <View style={styles.avatarActionsRow}>
                 <TouchableOpacity activeOpacity={0.85} onPress={pickImage} style={styles.avatarActionChip}>
                   <Text style={styles.changePhotoText}>Change</Text>
                 </TouchableOpacity>
@@ -470,7 +444,7 @@ export default function EditProfileSheet({ visible, onClose, card, onSaved }) {
                     <Text style={styles.removePhotoText}>Remove</Text>
                   </TouchableOpacity>
                 ) : null}
-              </View>
+              </View> */}
             </View>
           </View>
 
@@ -675,6 +649,20 @@ export default function EditProfileSheet({ visible, onClose, card, onSaved }) {
         </ScrollView>
 
         <LogoutModal visible={showLogout} onClose={() => setShowLogout(false)} />
+
+        {/* Profile-photo action sheet — replaces system Alert / ActionSheetIOS */}
+        <ActionSheetModal
+          visible={showPhotoSheet}
+          onClose={() => setShowPhotoSheet(false)}
+          title="Change Profile Photo"
+          actions={[
+            { label: "Take Photo", icon: Camera, onPress: openCamera },
+            { label: "Choose from Gallery", icon: ImagePlus, onPress: openGallery },
+            ...((avatarUri || user?.avatar || newAvatarAsset?.uri)
+              ? [{ label: "Remove Photo", icon: Trash2, destructive: true, onPress: handleRemoveAvatar }]
+              : []),
+          ]}
+        />
       </KeyboardAvoidingView>
 
       {/* Custom crop modal — replaces native Android crop */}

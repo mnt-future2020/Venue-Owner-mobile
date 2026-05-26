@@ -10,7 +10,9 @@ import { AuthProvider } from "../context/AuthContext";
 import { TabRefreshProvider } from "../context/TabRefreshContext";
 import { LocationProvider } from "../context/LocationContext";
 import { NotificationBadgeProvider } from "../context/NotificationBadgeContext";
+import { WishlistProvider } from "../context/WishlistContext";
 import ToastManager from "../components/ToastManager";
+import OfflineBanner from "../components/OfflineBanner";
 import ErrorBoundary from "../components/ui/ErrorBoundary";
 import { KeyboardProvider } from "../lib/keyboardController";
 
@@ -52,6 +54,7 @@ export default function RootLayout() {
             <AuthProvider>
               <TabRefreshProvider>
                 <LocationProvider>
+                  <WishlistProvider>
                   <NotificationBadgeProvider>
                   <StatusBar style="dark" backgroundColor="#FFFFFF" translucent={false} />
                   <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
@@ -61,7 +64,9 @@ export default function RootLayout() {
                     <Stack.Screen name="(stack)" options={{ headerShown: false }} />
                   </Stack>
                   <ToastManager />
+                  <OfflineBanner />
                   </NotificationBadgeProvider>
+                  </WishlistProvider>
                 </LocationProvider>
               </TabRefreshProvider>
             </AuthProvider>

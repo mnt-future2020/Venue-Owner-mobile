@@ -75,7 +75,7 @@ export default function VerifyRegistrationScreen() {
         safeReplace(router, "/(auth)/login");
         return;
       }
-      safeReplace(router, "/(tabs)/dashboard");
+      safeReplace(router, "/(tabs)/feed");
     } catch (err) {
       toast.error("Verification Failed", err?.response?.data?.detail || "Invalid OTP.");
       setOtp(["", "", "", "", "", ""]);
