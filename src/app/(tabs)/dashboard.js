@@ -24,10 +24,12 @@ import DateRangeFilter from "../../components/dashboard/DateRangeFilter";
 import RevenueTrendChart from "../../components/dashboard/RevenueTrendChart";
 import Header from "../../components/Header";
 import FullScreenLoader from "../../components/ui/FullScreenLoader";
+import DashboardSkeleton from "../../components/skeletons/DashboardSkeleton";
 import useCachedResource from "../../hooks/useCachedResource";
 import { CACHE_TTL } from "../../services/queryCache";
 import TabRefreshContext from "../../context/TabRefreshContext";
 import useNotificationBell from "../../hooks/useNotificationBell";
+import useSearchAction from "../../hooks/useSearchAction";
 import SwipeTabContext from "../../context/SwipeTabContext";
 
 // === Filter value → API params (web parity: pass start_date/end_date directly)
@@ -78,6 +80,7 @@ export default function DashboardScreen() {
   );
 
   const { bellAction } = useNotificationBell();
+  const searchAction = useSearchAction();
 
   // Selected venue defaults to first venue once they load
   const selectedVenue = useMemo(() => {
@@ -155,25 +158,16 @@ export default function DashboardScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={[]}>
-        <Header
-          logo
-          showLocation
-          actions={[bellAction]}
-        />
-        <FullScreenLoader />
-      </SafeAreaView>
+      <View style={styles.container}>
+        <DashboardSkeleton />
+      </View>
     );
   }
 
+  // Header is rendered once by SwipeableTabView above the pager — this
+  // screen only owns its scroll content.
   return (
-    <SafeAreaView style={styles.container} edges={[]}>
-      <Header
-        logo
-        showLocation
-        actions={[bellAction]}
-      />
-
+    <View style={styles.container}>
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={styles.scroll}
@@ -196,7 +190,7 @@ export default function DashboardScreen() {
           <Text style={styles.heroTitle}>
             Welcome,{" "}
             <Text style={styles.heroName}>
-              {user?.business_name || user?.name || "Owner"}
+              {user?.name || "Owner"}
             </Text>
           </Text>
           <Text style={styles.heroSub}>
@@ -302,7 +296,7 @@ export default function DashboardScreen() {
         {/* === Revenue Trend Chart === */}
         <RevenueTrendChart dailyRevenue={stats.dailyRevenue} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

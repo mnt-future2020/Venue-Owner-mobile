@@ -17,6 +17,7 @@ import {
   LogOut,
   Rss,
   MessageCircleMore,
+  Settings as SettingsIcon,
 } from "lucide-react-native";
 import { usePathname, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -34,6 +35,7 @@ const MENU_ITEMS = [
   { label: "Dashboard", route: "/(tabs)/dashboard", Icon: LayoutDashboard },
   { label: "Finance", route: "/(tabs)/finance", Icon: Wallet },
   { label: "Chat", route: "/(tabs)/chat", Icon: MessageCircleMore },
+  { label: "Settings", route: "/(stack)/settings", Icon: SettingsIcon },
 ];
 
 export default function SideDrawer({ visible, onClose, onLogout }) {

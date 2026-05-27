@@ -53,6 +53,25 @@ function fmtMoney(n) {
   return `₹${v.toLocaleString("en-IN")}`;
 }
 
+// Short payment-history timestamp — exact frontend parity (12-hour, en-IN).
+// VenueOwnerDashboard.js:2316 → "8 May, 06:15 pm"
+function fmtPaymentTime(ts) {
+  if (!ts) return "";
+  try {
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleString("en-IN", {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    return "";
+  }
+}
+
 function fmtDateTimeDDMM(ts) {
   if (!ts) return "—";
   try {
@@ -445,6 +464,44 @@ export default function BookingDetailSheet({
                       </Text>
                     </View>
                   </View>
+
+                  {/* Per-payment history — exact frontend parity
+                      (VenueOwnerDashboard.js:2306-2321). Renders one row per
+                      payment entry with type, method, amount, and timestamp. */}
+                  {Array.isArray(booking.payment_history) &&
+                  booking.payment_history.length > 0 ? (
+                    <View style={styles.paymentHistoryWrap}>
+                      <Text style={styles.paymentHistoryHeading}>
+                        Payment History
+                      </Text>
+                      {booking.payment_history.map((ph, idx) => {
+                        const typeLabel =
+                          ph.type === "advance"
+                            ? "Advance"
+                            : ph.type === "remaining"
+                              ? "Remaining"
+                              : "Full";
+                        const methodLabel =
+                          ph.method === "offline" ? "Cash" : ph.method || "";
+                        return (
+                          <View
+                            key={`ph-${idx}`}
+                            style={styles.paymentHistoryRow}
+                          >
+                            <Text style={styles.paymentHistoryLabel}>
+                              {typeLabel} ({methodLabel})
+                            </Text>
+                            <Text style={styles.paymentHistoryAmount}>
+                              {fmtMoney(ph.amount)}
+                            </Text>
+                            <Text style={styles.paymentHistoryTime}>
+                              {fmtPaymentTime(ph.recorded_at)}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  ) : null}
                 </View>
               ) : null}
 
@@ -494,7 +551,10 @@ export default function BookingDetailSheet({
                   </TouchableOpacity>
                 ) : null}
 
-                {isCancellable ? (
+                {/* Cancel — frontend parity (VenueOwnerDashboard.js:2523-2538):
+                    venue owners can ONLY cancel walk-in bookings; online
+                    (player-paid) bookings must be cancelled by the player. */}
+                {isCancellable && isWalkIn ? (
                   <TouchableOpacity
                     style={[styles.btn, styles.btnDanger]}
                     onPress={handleCancel}
@@ -746,6 +806,48 @@ const styles = StyleSheet.create({
   gridRow: {
     flexDirection: "row",
     gap: 12,
+  },
+  /* Payment history list (walk-in only) — mirrors frontend
+     VenueOwnerDashboard.js:2306-2321 */
+  paymentHistoryWrap: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    gap: 6,
+  },
+  paymentHistoryHeading: {
+    fontSize: 10,
+    fontFamily: FONTS.bodyBold,
+    color: "#6B7280",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  paymentHistoryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  paymentHistoryLabel: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: FONTS.body,
+    color: "#6B7280",
+    textTransform: "capitalize",
+  },
+  paymentHistoryAmount: {
+    fontSize: 12,
+    fontFamily: FONTS.bodyBold,
+    color: "#111827",
+  },
+  paymentHistoryTime: {
+    fontSize: 11,
+    fontFamily: FONTS.body,
+    color: "#6B7280",
+    minWidth: 100,
+    textAlign: "right",
   },
   gridCell: {
     flex: 1,

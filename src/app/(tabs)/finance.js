@@ -36,10 +36,12 @@ import SettlementStatusBadge from "../../components/finance/SettlementStatusBadg
 import PayoutCard from "../../components/payout/PayoutCard";
 import Header from "../../components/Header";
 import FullScreenLoader from "../../components/ui/FullScreenLoader";
+import DashboardSkeleton from "../../components/skeletons/DashboardSkeleton";
 import useCachedResource from "../../hooks/useCachedResource";
 import { CACHE_TTL } from "../../services/queryCache";
 import TabRefreshContext from "../../context/TabRefreshContext";
 import useNotificationBell from "../../hooks/useNotificationBell";
+import useSearchAction from "../../hooks/useSearchAction";
 import SwipeTabContext from "../../context/SwipeTabContext";
 
 const fmtINR = (n) => `₹${(Number(n) || 0).toLocaleString("en-IN")}`;
@@ -74,6 +76,7 @@ export default function FinanceScreen() {
   const router = useRouter();
   const { refreshSignals } = useContext(TabRefreshContext);
   const { bellAction } = useNotificationBell();
+  const searchAction = useSearchAction();
   const scrollRef = useRef(null);
 
   // --- Overview state
@@ -177,16 +180,9 @@ export default function FinanceScreen() {
   // ── Loading screen ───────────────────────────────────────────────────────
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={[]}>
-      <Header
-        logo
-        showLocation
-        actions={[
-          bellAction,
-        ]}
-      />
-        <FullScreenLoader />
-      </SafeAreaView>
+      <View style={styles.container}>
+        <DashboardSkeleton />
+      </View>
     );
   }
 
@@ -198,15 +194,9 @@ export default function FinanceScreen() {
   const commissionPct = Number(summary?.commission_pct || 0);
   const monthlyTrend = Array.isArray(summary?.monthly_trend) ? summary.monthly_trend : [];
 
+  // Header rendered once by SwipeableTabView above the pager.
   return (
-    <SafeAreaView style={styles.container} edges={[]}>
-      <Header
-        logo
-        showLocation
-        actions={[
-          bellAction,
-        ]}
-      />
+    <View style={styles.container}>
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={styles.scroll}
@@ -331,7 +321,7 @@ export default function FinanceScreen() {
           </View>
         ) : null}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
