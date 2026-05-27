@@ -39,6 +39,7 @@ import useCachedResource from "../../hooks/useCachedResource";
 import { CACHE_TTL } from "../../services/queryCache";
 import TabRefreshContext from "../../context/TabRefreshContext";
 import useNotificationBell from "../../hooks/useNotificationBell";
+import useSearchAction from "../../hooks/useSearchAction";
 import SwipeTabContext from "../../context/SwipeTabContext";
 
 import {
@@ -88,6 +89,7 @@ export default function VenueManagementScreen() {
   const router = useRouter();
   const { refreshSignals } = useContext(TabRefreshContext);
   const { bellAction } = useNotificationBell();
+  const searchAction = useSearchAction();
   const [selectedId, setSelectedId] = useState(null);
   const [activeTab, setActiveTab] = useState("bookings");
   // Track which sub-tabs the user has visited — once mounted, sub-tabs stay
@@ -170,29 +172,15 @@ export default function VenueManagementScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safe} edges={[]}>
-        <Header
-          logo
-          showLocation
-          actions={[
-            bellAction,
-          ]}
-        />
+      <View style={styles.safe}>
         <FullScreenLoader />
-      </SafeAreaView>
+      </View>
     );
   }
 
   if (venues.length === 0) {
     return (
-      <SafeAreaView style={styles.safe} edges={[]}>
-        <Header
-          logo
-          showLocation
-          actions={[
-            bellAction,
-          ]}
-        />
+      <View style={styles.safe}>
         <View style={styles.emptyWrap}>
           <EmptyState
             title="No venues yet"
@@ -207,18 +195,13 @@ export default function VenueManagementScreen() {
             <Text style={styles.addBigBtnText}>Add Your First Venue</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
+  // Header rendered once by SwipeableTabView above the pager.
   return (
-    <SafeAreaView style={styles.safe} edges={[]}>
-      <Header
-        logo
-        showLocation
-        actions={[bellAction]}
-      />
-
+    <View style={styles.safe}>
       {/* Venue selector card — dropdown on top row, actions row below
           guarantees Edit/Public/QR icons stay visible next to Add Venue */}
       <View style={styles.venueCard}>
@@ -449,7 +432,7 @@ export default function VenueManagementScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

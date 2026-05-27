@@ -30,11 +30,14 @@ import {
   Wallet,
   Rss,
   LogOut,
+  Settings as SettingsIcon,
 } from "lucide-react-native";
 import { Ionicons } from "@expo/vector-icons";
 import SwipeTabContext from "../context/SwipeTabContext";
 import BottomTabBar from "./BottomTabBar";
-import { _drawerCtrl } from "./Header";
+import Header, { _drawerCtrl } from "./Header";
+import useNotificationBell from "../hooks/useNotificationBell";
+import useSearchAction from "../hooks/useSearchAction";
 import Logo from "./Logo";
 import LogoutModal from "./ui/LogoutModal";
 import { PRIMARY_COLOR, FONTS } from "../constants/theme";
@@ -81,6 +84,7 @@ const MENU_ITEMS = [
   { label: "Dashboard", route: "/(tabs)/dashboard", Icon: LayoutDashboard },
   { label: "Finance", route: "/(tabs)/finance", Icon: Wallet },
   { label: "Chat", route: "/(tabs)/chat", ionicon: "chatbubble-ellipses-outline" },
+  { label: "Settings", route: "/(stack)/settings", Icon: SettingsIcon },
 ];
 
 // Routes that should NOT render the pager overlay (Stack screen shows directly).
@@ -91,6 +95,8 @@ export default function SwipeableTabView() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const { bellAction } = useNotificationBell();
+  const searchAction = useSearchAction();
 
   const isNonPagerRoute = NON_PAGER_ROUTES.some(
     (r) => pathname === r || pathname.startsWith(r + "/"),
@@ -126,6 +132,8 @@ export default function SwipeableTabView() {
 
   // Register external openers so Header hamburger button can drive the
   // gesture-style drawer panel (instead of opening its own SideDrawer Modal).
+  // IMPORTANT: This effect must remain active even when on non-pager routes
+  // (like /profile) to ensure the header menu button works correctly.
   useEffect(() => {
     _drawerCtrl.openExternal = animateDrawerOpen;
     _drawerCtrl.closeExternal = animateDrawerClose;
@@ -351,14 +359,112 @@ export default function SwipeableTabView() {
   );
 
   // /profile etc. — Stack screen renders standalone; pager overlay stays hidden.
+  // But we still need to maintain the drawer controller for header menu functionality.
   if (isNonPagerRoute) {
-    return null;
+    return (
+      <>
+        {/* Invisible drawer for non-pager routes */}
+        <Animated.View
+          style={[styles.backdrop, backdropStyle]}
+          pointerEvents="box-none"
+        >
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={animateDrawerClose}
+          />
+        </Animated.View>
+
+        <Animated.View
+          style={[
+            styles.drawerPanel,
+            drawerPanelStyle,
+            {
+              paddingTop: Math.max(insets.top, Platform.OS === "ios" ? 44 : 24),
+              paddingBottom: Math.max(insets.bottom, 16),
+            },
+          ]}
+        >
+          {/* Logo + Close */}
+          <View style={styles.drawerHeader}>
+            <Logo size={26} variant="website" />
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={animateDrawerClose}
+              style={styles.drawerCloseBtn}
+            >
+              <Text style={styles.drawerCloseBtnText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Menu */}
+          <View style={styles.drawerMenuList}>
+            {MENU_ITEMS.map(({ label, route, Icon, ionicon }) => {
+              const active = getDrawerActive(route);
+              const color = active ? PRIMARY_COLOR : "#475569";
+              return (
+                <TouchableOpacity
+                  key={label}
+                  style={[
+                    styles.drawerMenuItem,
+                    active && styles.drawerMenuItemActive,
+                  ]}
+                  activeOpacity={0.7}
+                  onPress={() => handleDrawerNav(route)}
+                >
+                  {active ? <View style={styles.drawerActiveBar} /> : null}
+                  {Icon ? (
+                    <Icon size={20} color={color} strokeWidth={2} />
+                  ) : (
+                    <Ionicons name={ionicon} size={20} color={color} />
+                  )}
+                  <Text
+                    style={[
+                      styles.drawerMenuLabel,
+                      active && styles.drawerMenuLabelActive,
+                    ]}
+                  >
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Logout at bottom */}
+          <View style={styles.drawerBottom}>
+            <TouchableOpacity
+              style={styles.drawerLogoutBtn}
+              activeOpacity={0.7}
+              onPress={() => {
+                animateDrawerClose();
+                setTimeout(() => setShowLogoutModal(true), 350);
+              }}
+            >
+              <LogOut size={20} color="#EF4444" strokeWidth={2} />
+              <Text style={styles.drawerLogoutText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+        <LogoutModal
+          visible={showLogoutModal}
+          onClose={() => setShowLogoutModal(false)}
+        />
+      </>
+    );
   }
 
   return (
     <>
       <SwipeTabContext.Provider value={contextValue}>
         <View style={styles.container}>
+          {/* Shared Header — rendered ONCE above the pager so it stays
+              fixed while tab content swipes underneath (mobile parity).
+              Each (tabs)/<screen>.js skips its own Header when inPager=true. */}
+          <Header
+            logo
+            showLocation
+            actions={[searchAction, bellAction]}
+          />
           <GestureDetector gesture={panGesture}>
             <Animated.View style={[styles.pager, pagerStyle]}>
               {PAGES.map((Page, i) => (

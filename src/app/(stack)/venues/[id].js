@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,12 @@ import {
   Pressable,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+// Gesture-handler-aware ScrollView — used ONLY for the horizontal slot grid
+// so its inner left/right scroll doesn't conflict with the outer
+// SwipeableTabView pan gesture (which would otherwise swipe to the next tab
+// when the user tries to scroll the table horizontally).
+import { ScrollView as GHScrollView } from "react-native-gesture-handler";
+import SwipeTabContext from "../../../context/SwipeTabContext";
 import { useRouter } from "expo-router";
 import {
   Calendar,
@@ -666,6 +672,18 @@ const _slotsCache = {};
 const slotsCacheKey = (venueId, date) => `${venueId || ""}|${date || ""}`;
 
 export function SlotsTab({ venueId }) {
+  // When SlotsTab is rendered inside SwipeableTabView (Venue Mgmt tab), the
+  // outer pager pan gesture fights the slot grid's horizontal scroll. We
+  // toggle `pagerSwipeEnabled` off the moment the user begins dragging the
+  // grid and restore it when the scroll settles — so swipe stays in-grid.
+  const swipeCtx = useContext(SwipeTabContext);
+  const handleGridDragStart = useCallback(() => {
+    swipeCtx?.setPagerSwipeEnabled?.(false);
+  }, [swipeCtx]);
+  const handleGridDragEnd = useCallback(() => {
+    swipeCtx?.setPagerSwipeEnabled?.(true);
+  }, [swipeCtx]);
+
   const today = useMemo(() => toIsoDate(new Date()), []);
   const [selectedDate, setSelectedDate] = useState(today);
   const initialKey = slotsCacheKey(venueId, today);
@@ -1174,7 +1192,14 @@ export function SlotsTab({ venueId }) {
               </View>
 
               {/* Horizontally scrollable turf columns */}
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
+              <GHScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ flex: 1 }}
+                onScrollBeginDrag={handleGridDragStart}
+                onScrollEndDrag={handleGridDragEnd}
+                onMomentumScrollEnd={handleGridDragEnd}
+              >
               <View>
                 {/* Header row */}
                 <View style={tabStyles.gridHeaderRow}>
@@ -1370,7 +1395,7 @@ export function SlotsTab({ venueId }) {
                   );
                 })}
               </View>
-              </ScrollView>
+              </GHScrollView>
             </View>
           </View>
         )}
@@ -1669,6 +1694,10 @@ export function WalkinTab({ venueId, venue }) {
   const [selectedBooking, setSelectedBooking] = useState(null);
 
   const fetchInFlight = useRef(false);
+  // Live ref to current bookings so the infinite-scroll append doesn't have
+  // to depend on `bookings` (which would re-create fetchPage every render).
+  const bookingsRef = useRef(bookings);
+  bookingsRef.current = bookings;
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -1695,13 +1724,16 @@ export function WalkinTab({ venueId, venue }) {
     [searchQuery, venueId, dateFilter]
   );
 
-  // Numbered pagination — matches frontend (no infinite scroll). Each page
-  // click replaces the visible list with that page's slice.
+  // Infinite scroll — `append:true` adds new page to existing list; `isRefresh`
+  // or page-1 fetch resets the list. Replaces the previous numbered-pagination
+  // pattern so mobile UX matches the rest of the app (scroll to load).
+  const [loadingMore, setLoadingMore] = useState(false);
   const fetchPage = useCallback(
-    async (pg, { isRefresh = false } = {}) => {
+    async (pg, { isRefresh = false, append = false } = {}) => {
       if (fetchInFlight.current) return;
       fetchInFlight.current = true;
-      if (!isRefresh && !_walkinCache[venueId]) setLoading(true);
+      if (!isRefresh && !append && !_walkinCache[venueId]) setLoading(true);
+      if (append) setLoadingMore(true);
       try {
         const params = buildParams(pg);
         const data = await bookingService.list(params);
@@ -1709,13 +1741,14 @@ export function WalkinTab({ venueId, venue }) {
         const stats = data?.walkin_stats || {};
         const pages = data?.pages || 1;
         const tot = Number(data?.total) || list.length;
-        setBookings(list);
+        const merged = append ? [...bookingsRef.current, ...list] : list;
+        setBookings(merged);
         setWalkinStats(stats);
         setTotalPages(pages);
         setTotal(tot);
         setPage(pg);
         _walkinCache[venueId] = {
-          bookings: list,
+          bookings: merged,
           walkinStats: stats,
           totalPages: pages,
           total: tot,
@@ -1732,6 +1765,7 @@ export function WalkinTab({ venueId, venue }) {
       } finally {
         fetchInFlight.current = false;
         setLoading(false);
+        setLoadingMore(false);
         setRefreshing(false);
       }
     },
@@ -1754,27 +1788,6 @@ export function WalkinTab({ venueId, venue }) {
     setRefreshing(true);
     fetchPage(1, { isRefresh: true });
   }, [fetchPage]);
-
-  // Smart page list — mirrors frontend's truncation: show 1, last, current±1,
-  // collapse the rest into "…" ellipsis markers.
-  const visiblePages = useMemo(() => {
-    if (totalPages <= 1) return [];
-    const filtered = Array.from({ length: totalPages }, (_, i) => i + 1).filter(
-      (p) =>
-        p === 1 ||
-        p === totalPages ||
-        Math.abs(p - page) <= 1
-    );
-    const out = [];
-    filtered.forEach((p, idx) => {
-      if (idx > 0 && p - filtered[idx - 1] > 1) out.push("...");
-      out.push(p);
-    });
-    return out;
-  }, [totalPages, page]);
-
-  const rangeStart = (page - 1) * PAGE_LIMIT + 1;
-  const rangeEnd = Math.min(page * PAGE_LIMIT, total);
 
   const renderHeader = useCallback(
     () => (
@@ -1847,66 +1860,30 @@ export function WalkinTab({ venueId, venue }) {
 
   // Numbered pagination footer — matches frontend pattern:
   // "N–M of Total"  ‹  1 … 4 5 6 … 12  ›
+  // Infinite-scroll footer — small "loading more" spinner while next page is
+  // appending, then a quiet "All walk-ins loaded" tag once we've reached the
+  // last page. Replaces the previous numbered-pagination control row.
   const renderFooter = useCallback(() => {
-    if (totalPages <= 1) return <View style={{ height: 24 }} />;
-    return (
-      <View style={tabStyles.paginationWrap}>
-        <Text style={tabStyles.paginationLabel}>
-          {rangeStart}–{rangeEnd} of {total}
-        </Text>
-        <View style={tabStyles.paginationBtnRow}>
-          <TouchableOpacity
-            style={[
-              tabStyles.pageNavBtn,
-              page <= 1 && tabStyles.pageBtnDisabled,
-            ]}
-            disabled={page <= 1}
-            onPress={() => fetchPage(page - 1)}
-            activeOpacity={0.7}
-          >
-            <ChevronLeft size={16} color="#6B7280" />
-          </TouchableOpacity>
-          {visiblePages.map((p, i) =>
-            p === "..." ? (
-              <Text key={`dots-${i}`} style={tabStyles.pageEllipsis}>
-                …
-              </Text>
-            ) : (
-              <TouchableOpacity
-                key={p}
-                onPress={() => fetchPage(p)}
-                activeOpacity={0.7}
-                style={[
-                  tabStyles.pageBtn,
-                  p === page && tabStyles.pageBtnActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    tabStyles.pageBtnText,
-                    p === page && tabStyles.pageBtnTextActive,
-                  ]}
-                >
-                  {p}
-                </Text>
-              </TouchableOpacity>
-            )
-          )}
-          <TouchableOpacity
-            style={[
-              tabStyles.pageNavBtn,
-              page >= totalPages && tabStyles.pageBtnDisabled,
-            ]}
-            disabled={page >= totalPages}
-            onPress={() => fetchPage(page + 1)}
-            activeOpacity={0.7}
-          >
-            <ChevronRight size={16} color="#6B7280" />
-          </TouchableOpacity>
+    if (loadingMore) {
+      return (
+        <View style={tabStyles.loadMoreWrap}>
+          <ActivityIndicator size="small" color={PRIMARY_COLOR} />
         </View>
-      </View>
-    );
-  }, [totalPages, page, total, rangeStart, rangeEnd, visiblePages, fetchPage]);
+      );
+    }
+    if (page >= totalPages && bookings.length > 0) {
+      return (
+        <Text style={tabStyles.timelineAllLoaded}>All walk-ins loaded</Text>
+      );
+    }
+    return <View style={{ height: 24 }} />;
+  }, [loadingMore, page, totalPages, bookings.length]);
+
+  const onEndReached = useCallback(() => {
+    if (loading || loadingMore || refreshing) return;
+    if (page >= totalPages) return;
+    fetchPage(page + 1, { append: true });
+  }, [loading, loadingMore, refreshing, page, totalPages, fetchPage]);
 
   const renderEmpty = useCallback(() => {
     if (loading) {
@@ -1961,6 +1938,8 @@ export function WalkinTab({ venueId, venue }) {
         ListFooterComponent={renderFooter}
         ListEmptyComponent={renderEmpty}
         keyboardShouldPersistTaps="handled"
+        onEndReached={onEndReached}
+        onEndReachedThreshold={0.4}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -2681,6 +2660,12 @@ const tabStyles = StyleSheet.create({
     color: PRIMARY_COLOR,
     letterSpacing: 0.8,
   },
+  // Infinite-scroll footer — wraps the spinner while next page is appending.
+  loadMoreWrap: {
+    paddingVertical: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   timelineAllLoaded: {
     fontSize: 11,
     fontFamily: FONTS.bodyMedium,
@@ -2795,6 +2780,11 @@ const tabStyles = StyleSheet.create({
   },
   gridHeaderRow: {
     flexDirection: "row",
+    // Fixed height — frozen Time column header and scrollable turf headers
+    // live in separate parent containers, so we must pin the row height
+    // identically on both sides for them to line up. Turf header is two
+    // lines (name + sport), so we use 52px to fit both comfortably.
+    height: 52,
     backgroundColor: "#F8FAFC",
     borderBottomWidth: 1,
     borderBottomColor: "rgba(229, 231, 235, 0.7)",
@@ -2815,7 +2805,11 @@ const tabStyles = StyleSheet.create({
   },
   gridRow: {
     flexDirection: "row",
-    minHeight: 78,
+    // Fixed (not minHeight) — see gridHeaderRow comment. Both columns must
+    // have identical row heights for the frozen Time labels to align with
+    // the turf slot tiles. 80px fits cellTile (minHeight 48 + paddingV 8+8
+    // + status text + optional price line).
+    height: 80,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(229, 231, 235, 0.5)",
   },
@@ -2826,7 +2820,7 @@ const tabStyles = StyleSheet.create({
     justifyContent: "center",
   },
   timeColCell: {
-    width: 88,
+    width: 80,
     paddingVertical: 8,
     paddingHorizontal: 6,
     borderRightWidth: 1,
@@ -2865,9 +2859,10 @@ const tabStyles = StyleSheet.create({
   },
   timeLabel: {
     fontSize: 12,
-    fontFamily: FONTS.bodyBold,
-    fontWeight: "800",
+    fontFamily: FONTS.bodyExtraBold,
+    fontWeight: "700",
     color: "#0F172A",
+    letterSpacing: 0.3,
   },
   // Past-row time label — reduced opacity
   timeLabelPast: { color: "rgba(148, 163, 184, 0.7)" },
