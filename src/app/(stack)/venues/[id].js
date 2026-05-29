@@ -54,6 +54,7 @@ import { getSportIconName } from "../../../constants/venueConstants";
 import { PRIMARY_COLOR, FONTS } from "../../../constants/theme";
 import venueService from "../../../services/venueService";
 import bookingService from "../../../services/bookingService";
+import { onCacheEvent } from "../../../services/cacheEvents";
 import toast from "../../../utils/toast";
 
 import StatCard from "../../../components/dashboard/StatCard";
@@ -186,6 +187,17 @@ function ModePill({ options, value, onChange, inline = false }) {
 // background revalidate runs. Keyed by venueId so multi-venue switching
 // preserves each venue's last view.
 const _bookingsCache = {};
+
+// Wipe every module-level cache when the user logs out. Without this the
+// next sign-in still renders the previous owner's bookings / slots / walk-ins
+// / attendance because these maps are keyed by venueId and survive the
+// AuthContext state reset.
+onCacheEvent("auth:logout", () => {
+  for (const k of Object.keys(_bookingsCache)) delete _bookingsCache[k];
+  for (const k of Object.keys(_slotsCache)) delete _slotsCache[k];
+  for (const k of Object.keys(_walkinCache)) delete _walkinCache[k];
+  for (const k of Object.keys(_attendanceCache)) delete _attendanceCache[k];
+});
 
 export function BookingsTab({ venueId }) {
   // Today (ISO YYYY-MM-DD) — used for timeline date-dot color states
@@ -691,6 +703,7 @@ export function SlotsTab({ venueId }) {
   const [slots, setSlots] = useState(initialCached?.slots || []);
   // Spinner only fires when this (venue, date) combo has never been fetched.
   const [loading, setLoading] = useState(!initialCached);
+  const [refreshing, setRefreshing] = useState(false);
   const [bookingDetail, setBookingDetail] = useState(null);
   // Unreserve held-slot dialog state (mirrors frontend unreserveSlot)
   const [unreserveSlot, setUnreserveSlot] = useState(null);
@@ -747,7 +760,7 @@ export function SlotsTab({ venueId }) {
       if (!map.has(s.turf_number)) {
         map.set(s.turf_number, {
           turf_number: s.turf_number,
-          turf_name: s.turf_name || `Turf ${s.turf_number}`,
+          turf_name: s.turf_name || `Turf #${s.turf_number}`,
           sport: s.sport,
         });
       }
@@ -952,8 +965,21 @@ export function SlotsTab({ venueId }) {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={loading}
-            onRefresh={loadSlots}
+            refreshing={refreshing}
+            // Force-bypass the module-level `_slotsCache` so pull-to-refresh
+            // actually re-fetches. Without `force: true`, loadSlots returned
+            // cached data immediately — a renamed turf (e.g. "Football Turf 1"
+            // → "cricket/football") would never appear until app restart.
+            // Use a dedicated `refreshing` state because `loading` stays
+            // false on cache hit, so the spinner never animates otherwise.
+            onRefresh={async () => {
+              setRefreshing(true);
+              try {
+                await loadSlots({ force: true });
+              } finally {
+                setRefreshing(false);
+              }
+            }}
             tintColor={PRIMARY_COLOR}
           />
         }
@@ -1645,12 +1671,29 @@ export function SlotsTab({ venueId }) {
 
 // ───────────── HOLDS sub-tab ─────────────
 export function HoldsTab({ venue }) {
+  const panelRef = useRef(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await panelRef.current?.refresh?.();
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
   return (
     <ScrollView
       contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={PRIMARY_COLOR}
+        />
+      }
     >
-      <HoldRulesPanel venue={venue} />
+      <HoldRulesPanel ref={panelRef} venue={venue} />
     </ScrollView>
   );
 }
@@ -1980,6 +2023,7 @@ export function CheckinTab({ venueId, venueName }) {
   // Attendance state
   const [todayBookings, setTodayBookings] = useState(cachedAttendance?.todayBookings || []);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [markingId, setMarkingId] = useState(null);
 
   const today = useMemo(() => toIsoDate(new Date()), []);
@@ -2149,6 +2193,20 @@ export function CheckinTab({ venueId, venueName }) {
         contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={async () => {
+              setRefreshing(true);
+              try {
+                await loadTodayBookings();
+              } finally {
+                setRefreshing(false);
+              }
+            }}
+            tintColor={PRIMARY_COLOR}
+          />
+        }
       >
         {/* Mode selector */}
         <ModePill

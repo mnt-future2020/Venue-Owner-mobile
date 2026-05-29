@@ -44,6 +44,7 @@ import {
 } from "lucide-react-native";
 import chatService from "../../services/chatService";
 import socialService from "../../services/socialService";
+import { onCacheEvent } from "../../services/cacheEvents";
 import { mediaUrl } from "../../utils/media";
 import toast from "../../utils/toast";
 import { PRIMARY_COLOR } from "../../constants/theme";
@@ -672,6 +673,15 @@ function NewChatModal({ visible, onClose, onSelectUser }) {
 
 /* ── Module-level cache ── */
 const _cc = { conversations: [], groups: [], requests: [], ready: false };
+
+// Reset the cached chat list on logout so the next user doesn't see the
+// previous account's threads / requests.
+onCacheEvent("auth:logout", () => {
+  _cc.conversations = [];
+  _cc.groups = [];
+  _cc.requests = [];
+  _cc.ready = false;
+});
 const MAIN_CHAT_TABS = [
   { key: "all", label: "Chat" },
   { key: "groups", label: "Groups" },

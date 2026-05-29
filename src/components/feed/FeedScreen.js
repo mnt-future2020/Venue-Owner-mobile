@@ -21,6 +21,7 @@ import feedService from "../../services/feedService";
 import chatService from "../../services/chatService";
 import socialService from "../../services/socialService";
 import cacheService from "../../services/cacheService";
+import { onCacheEvent } from "../../services/cacheEvents";
 import toast from "../../utils/toast";
 import TabRefreshContext from "../../context/TabRefreshContext";
 import SwipeTabContext from "../../context/SwipeTabContext";
@@ -43,6 +44,18 @@ const _cache = {
   suggested: [],
   ready: false, // true after first successful load
 };
+
+// Wipe the cached feed when the logged-in user changes — otherwise the next
+// owner briefly sees the previous account's posts / stories / suggestions.
+onCacheEvent("auth:logout", () => {
+  _cache.for_you = { posts: [], cursor: null, hasMore: false };
+  _cache.following = { posts: [], cursor: null, hasMore: false };
+  _cache.trending = { posts: [], cursor: null, hasMore: false };
+  _cache.stories = [];
+  _cache.engagement = null;
+  _cache.suggested = [];
+  _cache.ready = false;
+});
 
 // Initialize cache from cacheService if available
 const initializeCache = () => {

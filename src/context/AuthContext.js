@@ -3,6 +3,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { jwtDecode } from "jwt-decode";
 import authService from "../services/authService";
+import queryCache from "../services/queryCache";
+import cacheService from "../services/cacheService";
+import { emitCacheEvent } from "../services/cacheEvents";
 import { STORAGE_KEYS } from "../constants/storage";
 import { API_BASE } from "../lib/axios";
 
@@ -174,6 +177,15 @@ export const AuthProvider = ({ children }) => {
       STORAGE_KEYS.refreshToken,
       STORAGE_KEYS.user,
     ]);
+    // CRITICAL: clear every in-memory cache before swapping users. Without
+    // this, the next user logs in and still sees the previous owner's
+    // venues / bookings / slots etc. (module-level caches keyed by venueId
+    // survive across logouts otherwise).
+    try {
+      queryCache.clear();
+      cacheService.clear();
+    } catch {}
+    emitCacheEvent("auth:logout");
     setToken(null);
     setUser(null);
   };

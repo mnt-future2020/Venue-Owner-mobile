@@ -7,6 +7,7 @@ import {
   Modal,
   Platform,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -406,7 +407,21 @@ export default function EditProfileSheet({ visible, onClose, card, onSaved }) {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
       >
-        <View style={[styles.header, { paddingTop: Math.max(insets.top, Platform.OS === "ios" ? 12 : 16) }]}>
+        <View
+          style={[
+            styles.header,
+            {
+              // Inside a Modal on Android, `useSafeAreaInsets` returns 0
+              // because the SafeAreaProvider doesn't reach the modal portal.
+              // Fall back to StatusBar.currentHeight so the header clears
+              // the status bar instead of rendering underneath it.
+              paddingTop:
+                Platform.OS === "android"
+                  ? (StatusBar.currentHeight || 24) + 8
+                  : Math.max(insets.top, 12),
+            },
+          ]}
+        >
           <TouchableOpacity onPress={onClose} style={styles.headerBtn}>
             <X size={16} color="#64748B" />
           </TouchableOpacity>
