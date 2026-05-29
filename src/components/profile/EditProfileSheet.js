@@ -393,9 +393,13 @@ export default function EditProfileSheet({ visible, onClose, card, onSaved }) {
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="pageSheet"
+      // `presentationStyle="pageSheet"` is iOS-only — on Android the Modal
+      // always goes fullscreen. Combined with `statusBarTranslucent` it
+      // pushed our header behind the status bar, so we drop both: the OS
+      // now reserves the status-bar strip and the header's `paddingTop:
+      // insets.top` lands the title cleanly below it.
+      // (Global `<StatusBar style="dark" />` is mounted once in src/app/_layout.js — no need to re-declare here.)
       onRequestClose={onClose}
-      statusBarTranslucent
     >
       <KeyboardAvoidingView
         style={styles.container}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
@@ -12,6 +12,7 @@ import LocationPickerModal from "./ui/LocationPickerModal";
 import { PRIMARY_COLOR, FONTS } from "../constants/theme";
 import { useAuth } from "../context/AuthContext";
 import { useLocation } from "../context/LocationContext";
+import SwipeTabContext from "../context/SwipeTabContext";
 import { safePush } from "../services/navigationGuard";
 import { mediaUrl } from "../utils/media";
 
@@ -52,8 +53,15 @@ export default function Header({
   // drawer opener (animated panel + gesture-driven), prefer it. Otherwise
   // fall back to the local SideDrawer Modal — used on stack screens that
   // sit outside the pager.
+  // Mirrors mobile/src/components/Header.js — uses inPager (from
+  // SwipeTabContext) to decide which drawer to open instead of probing the
+  // possibly-stale `_drawerCtrl.openExternal` ref. SwipeableTabView returns
+  // null on non-pager routes (/profile etc.) but its useEffect already
+  // registered openExternal, so the old probe would invoke a no-op and
+  // leave the user staring at nothing. inPager is the source of truth.
+  const { inPager } = useContext(SwipeTabContext);
   const openDrawerFromHeader = () => {
-    if (_drawerCtrl && _drawerCtrl.openExternal) {
+    if (inPager && _drawerCtrl?.openExternal) {
       _drawerCtrl.openExternal();
     } else {
       setDrawerVisible(true);

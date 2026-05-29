@@ -930,13 +930,18 @@ const styles = StyleSheet.create({
     color: PRIMARY_COLOR,
   },
   reactionBtnText: {
-    fontSize: 16,
+    fontSize: 20,
+    lineHeight: 24,
     color: "#64748B",
-    fontWeight: "700",
+    fontWeight: "500",
   },
   reactionBtnTextActive: {
     color: PRIMARY_COLOR,
-    fontSize: 18,
+    // Emoji glyphs render visually larger than text glyphs at the same
+    // fontSize. Tuning the active size to ~16 makes the selected reaction
+    // emoji line up with the 20px Heart / MessageSquare / Share2 icons.
+    fontSize: 16,
+    lineHeight: 20,
   },
   // Frontend bookmark button (line 1832): `ml-1 sm:ml-2 min-h-[44px] min-w-[44px] flex
   // items-center justify-center` — same 44×44 tap target with centered content.

@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   RefreshControl,
   Platform,
+  Modal,
+  Pressable,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -20,6 +22,7 @@ import {
   Banknote,
   Clock,
   Plus,
+  ArrowUpRight,
 } from "lucide-react-native";
 import { PRIMARY_COLOR, FONTS } from "../../constants/theme";
 import analyticsService from "../../services/analyticsService";
@@ -33,6 +36,7 @@ import IncomeBySportTable from "../../components/finance/IncomeBySportTable";
 import ExpenseBreakdownCard from "../../components/finance/ExpenseBreakdownCard";
 import MonthlyTrendChart from "../../components/finance/MonthlyTrendChart";
 import SettlementStatusBadge from "../../components/finance/SettlementStatusBadge";
+import TransactionRow from "../../components/finance/TransactionRow";
 import PayoutCard from "../../components/payout/PayoutCard";
 import Header from "../../components/Header";
 import FullScreenLoader from "../../components/ui/FullScreenLoader";
@@ -83,6 +87,9 @@ export default function FinanceScreen() {
   const [dateFilter, setDateFilter] = useState({ preset: "all" });
   const [selectedVenueId, setSelectedVenueId] = useState("all"); // "all" or venue id
   const [activeTab, setActiveTab] = useState("overview"); // "overview" | "payouts"
+  // Total Bookings card → Monthly Bookings modal (frontend parity:
+  // VenueFinancePage.js:457 + dialog at :464-489).
+  const [showMonthlyBookings, setShowMonthlyBookings] = useState(false);
 
   // ── Cached venues (shared with dashboard/venues screens) ────────────────
   const { data: venues = [] } = useCachedResource(
@@ -125,22 +132,22 @@ export default function FinanceScreen() {
   } = useCachedResource(
     "finance:payouts",
     async () => {
-      const [psum, linked, list] = await Promise.all([
+      const [psum, linked, txns] = await Promise.all([
         payoutService.getMySummary().catch(() => null),
         payoutService.getLinkedAccount().catch(() => null),
-        payoutService.getMyPayouts({ page: 1, limit: 20 }).catch(() => null),
+        // Develop 2026-05-26 (commit afe041e): per-booking transaction
+        // history with settlement_status. Replaces the old paginated
+        // /my-payouts settlement list as the Payouts tab data source —
+        // frontend now reads the same endpoint via payoutAPI.myTransactions.
+        payoutService.getMyTransactions().catch(() => null),
       ]);
-      const payouts = Array.isArray(list)
-        ? list
-        : Array.isArray(list?.settlements)
-        ? list.settlements
-        : Array.isArray(list?.payouts)
-        ? list.payouts
+      const transactions = Array.isArray(txns?.transactions)
+        ? txns.transactions
         : [];
       return {
         payoutSummary: psum || null,
         linkedAccount: linked && linked.linked === false ? null : linked || null,
-        myPayouts: payouts,
+        myPayouts: transactions,
       };
     },
     { ttl: CACHE_TTL.dashboard, revalidateOnMount: false }
@@ -226,12 +233,18 @@ export default function FinanceScreen() {
         {/* 4 stat cards (2x2) — web parity */}
         <View style={styles.statsGrid}>
           <View style={styles.statsRow}>
-            <StatCard
-              icon={<CheckCircle size={18} color={PRIMARY_COLOR} strokeWidth={2.3} />}
-              label="Total Bookings"
-              value={String(totalBookings)}
-              bgColor={`${PRIMARY_COLOR}1A`}
-            />
+            <TouchableOpacity
+              style={{ flex: 1 }}
+              activeOpacity={0.85}
+              onPress={() => setShowMonthlyBookings(true)}
+            >
+              <StatCard
+                icon={<CheckCircle size={18} color={PRIMARY_COLOR} strokeWidth={2.3} />}
+                label="Total Bookings"
+                value={String(totalBookings)}
+                bgColor={`${PRIMARY_COLOR}1A`}
+              />
+            </TouchableOpacity>
             <View style={{ width: 12 }} />
             <StatCard
               icon={
@@ -321,6 +334,71 @@ export default function FinanceScreen() {
           </View>
         ) : null}
       </ScrollView>
+
+      {/* Monthly Bookings modal — frontend parity
+          (VenueFinancePage.js:464-489). Shown when user taps the Total
+          Bookings stat card on the Overview tab. */}
+      <Modal
+        visible={showMonthlyBookings}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMonthlyBookings(false)}
+      >
+        <Pressable
+          style={styles.breakdownBackdrop}
+          onPress={() => setShowMonthlyBookings(false)}
+        >
+          <Pressable style={styles.breakdownCard} onPress={() => {}}>
+            <View style={styles.breakdownHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.breakdownTitle}>Monthly Bookings</Text>
+                <Text style={styles.breakdownSubtitle}>
+                  Booking count per month (last 6 months)
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowMonthlyBookings(false)}
+                style={styles.breakdownCloseBtn}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.breakdownCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.breakdownBody}>
+              {monthlyTrend.length > 0 ? (
+                [...monthlyTrend].reverse().map((m) => (
+                  <View
+                    key={m.month}
+                    style={[
+                      styles.breakdownRow,
+                      { backgroundColor: "rgba(15, 23, 42, 0.04)" },
+                    ]}
+                  >
+                    <Text style={styles.breakdownRowLabel}>{m.month}</Text>
+                    <Text
+                      style={[
+                        styles.breakdownRowValue,
+                        { color: PRIMARY_COLOR },
+                      ]}
+                    >
+                      {m.bookings || 0} bookings
+                    </Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.breakdownEmpty}>No data available</Text>
+              )}
+              <View style={styles.breakdownTotalRow}>
+                <Text style={styles.breakdownTotalLabel}>Total</Text>
+                <Text style={styles.breakdownTotalValue}>
+                  {totalBookings} bookings
+                </Text>
+              </View>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -396,62 +474,187 @@ function BankField({ label, value, mono }) {
   );
 }
 
-// 4 payout stat cards in 2x2 grid (web parity).
+// 3 payout stat cards in a 2-column grid — frontend parity for content
+// (VenueFinancePage.js:1307-1309 removes Last Payout) but we keep the
+// existing 2-column visual rhythm. Row 1: Total Earned + Total Settled.
+// Row 2: Pending in the left half, right half stays empty.
 function PayoutSummaryGrid({ summary }) {
   const totalEarned = summary?.total_earned || 0;
   const totalSettled = summary?.total_settled || summary?.settled_total || 0;
   const pending = summary?.pending_settlement || summary?.floating_balance || 0;
-  const lastAmount = summary?.last_payout_amount;
+  const pendingNet =
+    summary?.pending_settlement_before_deductions || 0;
+  const deductions = summary?.total_deductions || 0;
+  // Three-bucket row — only render when at least one bucket has value
+  // (frontend gate: VenueFinancePage.js:1296).
+  const floating = summary?.floating_balance || 0;
+  const releasedPending = summary?.released_pending || 0;
+  const settledTotal = summary?.settled_total || 0;
+  const showBuckets = floating > 0 || releasedPending > 0 || settledTotal > 0;
+  const [showBreakdown, setShowBreakdown] = useState(false);
   return (
     <View style={styles.statsGrid}>
-      <View style={styles.statsRow}>
-        <PayoutCard
-          icon={<IndianRupee size={18} color={PRIMARY_COLOR} strokeWidth={2.3} />}
-          label="Total Earned"
-          value={totalEarned}
-          bgColor={`${PRIMARY_COLOR}1A`}
-        />
-        <View style={{ width: 12 }} />
-        <PayoutCard
-          icon={<CheckCircle size={18} color="#10B981" strokeWidth={2.3} />}
-          label="Total Settled"
-          value={totalSettled}
-          bgColor="rgba(16,185,129,0.1)"
-        />
-      </View>
-      <View style={[styles.statsRow, { marginTop: 12 }]}>
-        <PayoutCard
-          icon={<Clock size={18} color="#F59E0B" strokeWidth={2.3} />}
-          label="Pending"
-          value={pending}
-          bgColor="rgba(245,158,11,0.1)"
-        />
-        <View style={{ width: 12 }} />
-        {/* Last payout — show ₹value or "—" when null */}
-        <View style={styles.lastPayoutCard}>
-          <View style={styles.lastPayoutIcon}>
-            <Banknote size={18} color="#0EA5E9" strokeWidth={2.3} />
+      {showBuckets ? (
+        <View style={[styles.statsRow, { marginBottom: 12, gap: 8 }]}>
+          <View style={{ flex: 1 }}>
+            <PayoutCard
+              icon={<Clock size={16} color="#0EA5E9" strokeWidth={2.3} />}
+              label="On Hold (Floating)"
+              value={floating}
+              color="#0EA5E9"
+              bgColor="rgba(14,165,233,0.10)"
+            />
           </View>
-          <Text style={styles.lastPayoutLabel}>Last Payout</Text>
-          <Text style={styles.lastPayoutValue} numberOfLines={1} adjustsFontSizeToFit>
-            {lastAmount != null && lastAmount !== 0 ? fmtINR(lastAmount) : "—"}
-          </Text>
+          <View style={{ flex: 1 }}>
+            <PayoutCard
+              icon={<ArrowUpRight size={16} color="#F59E0B" strokeWidth={2.3} />}
+              label="Released (T+2)"
+              value={releasedPending}
+              color="#F59E0B"
+              bgColor="rgba(245,158,11,0.10)"
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <PayoutCard
+              icon={<CheckCircle size={16} color="#10B981" strokeWidth={2.3} />}
+              label="Settled to Bank"
+              value={settledTotal}
+              color="#10B981"
+              bgColor="rgba(16,185,129,0.10)"
+            />
+          </View>
+        </View>
+      ) : null}
+      {/* Both rows use explicit 50% halves so the Pending card on row 2
+          renders exactly the same width as the row 1 cards (an empty
+          `flex: 1` placeholder didn't claim layout space reliably and
+          made Pending look wider than its siblings). */}
+      <View style={styles.statsRow}>
+        <View style={styles.halfLeft}>
+          {/* Frontend parity: tapping Total Earned opens a breakdown dialog
+              (VenueFinancePage.js:1307 onClick={() => setShowEarningsBreakdown(true)}). */}
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => setShowBreakdown(true)}
+          >
+            <PayoutCard
+              icon={<IndianRupee size={18} color={PRIMARY_COLOR} strokeWidth={2.3} />}
+              label="Total Earned"
+              value={totalEarned}
+              bgColor={`${PRIMARY_COLOR}1A`}
+            />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.halfRight}>
+          <PayoutCard
+            icon={<CheckCircle size={18} color="#10B981" strokeWidth={2.3} />}
+            label="Total Settled"
+            value={totalSettled}
+            bgColor="rgba(16,185,129,0.1)"
+          />
         </View>
       </View>
+      <View style={[styles.statsRow, { marginTop: 12 }]}>
+        <View style={styles.halfLeft}>
+          <PayoutCard
+            icon={<Clock size={18} color="#F59E0B" strokeWidth={2.3} />}
+            label="Pending"
+            value={pending}
+            bgColor="rgba(245,158,11,0.1)"
+          />
+        </View>
+        <View style={styles.halfRight} />
+      </View>
+
+      {/* Total Earned breakdown — mirrors frontend ResponsiveDialog
+          (VenueFinancePage.js:1313-1343). */}
+      <Modal
+        visible={showBreakdown}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowBreakdown(false)}
+      >
+        <Pressable
+          style={styles.breakdownBackdrop}
+          onPress={() => setShowBreakdown(false)}
+        >
+          <Pressable style={styles.breakdownCard} onPress={() => {}}>
+            <View style={styles.breakdownHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.breakdownTitle}>Total Earned Breakdown</Text>
+                <Text style={styles.breakdownSubtitle}>
+                  How your total earnings are calculated
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowBreakdown(false)}
+                style={styles.breakdownCloseBtn}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.breakdownCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.breakdownBody}>
+              <View
+                style={[
+                  styles.breakdownRow,
+                  { backgroundColor: "rgba(16,185,129,0.06)" },
+                ]}
+              >
+                <Text style={styles.breakdownRowLabel}>Settled Payouts</Text>
+                <Text style={[styles.breakdownRowValue, { color: "#059669" }]}>
+                  +{fmtINR(totalSettled)}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.breakdownRow,
+                  { backgroundColor: "rgba(245,158,11,0.06)" },
+                ]}
+              >
+                <Text style={styles.breakdownRowLabel}>Pending (net)</Text>
+                <Text style={[styles.breakdownRowValue, { color: "#D97706" }]}>
+                  +{fmtINR(pendingNet)}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.breakdownRow,
+                  { backgroundColor: "rgba(239,68,68,0.06)" },
+                ]}
+              >
+                <Text style={styles.breakdownRowLabel}>Deductions (all)</Text>
+                <Text style={[styles.breakdownRowValue, { color: "#DC2626" }]}>
+                  -{fmtINR(deductions)}
+                </Text>
+              </View>
+              <View style={styles.breakdownTotalRow}>
+                <Text style={styles.breakdownTotalLabel}>Total Earned</Text>
+                <Text style={styles.breakdownTotalValue}>
+                  {fmtINR(totalEarned)}
+                </Text>
+              </View>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
 
+// Renders per-booking transactions returned by payoutService.getMyTransactions
+// (`/payouts/my-transactions`). Each row is a card matching the frontend
+// VenueFinancePage transactions table — date+sport title, venue/time/host
+// sub-row, status pill (4 states incl. cancelled), and money grid.
 function PayoutHistorySection({ payouts }) {
   if (!payouts || payouts.length === 0) {
     return (
       <View style={{ marginTop: 8 }}>
-        <Text style={styles.sectionLabel}>Payout History</Text>
+        <Text style={styles.sectionLabel}>Transactions</Text>
         <View style={styles.emptyPayouts}>
           <Banknote size={40} color="#9CA3AF" strokeWidth={1.8} style={{ opacity: 0.3 }} />
-          <Text style={styles.emptyText}>
-            No payouts yet. Payouts are processed by the platform admin.
-          </Text>
+          <Text style={styles.emptyText}>No transactions yet.</Text>
         </View>
       </View>
     );
@@ -459,28 +662,10 @@ function PayoutHistorySection({ payouts }) {
 
   return (
     <View style={{ marginTop: 8 }}>
-      <Text style={styles.sectionLabel}>Payout History</Text>
-      <View style={styles.payoutListCard}>
-        {payouts.map((p, i) => (
-          <View
-            key={p.id || i}
-            style={[styles.payoutRow, i === payouts.length - 1 && { borderBottomWidth: 0 }]}
-          >
-            <View style={{ flex: 1, marginRight: 8 }}>
-              <Text style={styles.payoutAmount}>{fmtINR(p.net_amount || 0)}</Text>
-              <Text style={styles.payoutMeta} numberOfLines={1}>
-                {fmtPeriod(p.period_start)} → {fmtPeriod(p.period_end)}
-              </Text>
-              {p.transfer_utr ? (
-                <Text style={styles.payoutUtr} numberOfLines={1}>
-                  UTR: {p.transfer_utr}
-                </Text>
-              ) : null}
-            </View>
-            <SettlementStatusBadge status={p.status || "pending"} />
-          </View>
-        ))}
-      </View>
+      <Text style={styles.sectionLabel}>Transactions</Text>
+      {payouts.map((t, i) => (
+        <TransactionRow key={t.id || `txn-${i}`} txn={t} />
+      ))}
     </View>
   );
 }
@@ -498,6 +683,103 @@ const styles = StyleSheet.create({
   // Stat cards grid (used for both header stats and payout summary 2x2)
   statsGrid: { marginTop: 12, marginBottom: 12 },
   statsRow: { flexDirection: "row" },
+  // Explicit 50% halves with internal gap padding — guarantees identical
+  // widths for the payout summary cards in both rows.
+  halfLeft: { width: "50%", paddingRight: 6 },
+  halfRight: { width: "50%", paddingLeft: 6 },
+
+  // Total Earned breakdown modal — frontend parity (VenueFinancePage.js:1313).
+  breakdownBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  breakdownCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 18,
+  },
+  breakdownHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 14,
+  },
+  breakdownTitle: {
+    fontSize: 16,
+    fontFamily: FONTS.bodyExtraBold,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  breakdownSubtitle: {
+    marginTop: 3,
+    fontSize: 11,
+    fontFamily: FONTS.body,
+    color: "#6B7280",
+  },
+  breakdownCloseBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  breakdownCloseText: {
+    fontSize: 13,
+    color: "#64748B",
+    fontWeight: "600",
+  },
+  breakdownBody: { gap: 10 },
+  breakdownEmpty: {
+    fontSize: 11,
+    fontFamily: FONTS.body,
+    color: "#9CA3AF",
+    textAlign: "center",
+    paddingVertical: 14,
+  },
+  breakdownRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  breakdownRowLabel: {
+    fontSize: 13,
+    fontFamily: FONTS.body,
+    color: "#6B7280",
+  },
+  breakdownRowValue: {
+    fontSize: 13,
+    fontFamily: FONTS.bodyBold,
+    fontWeight: "800",
+  },
+  breakdownTotalRow: {
+    marginTop: 4,
+    paddingTop: 12,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(229, 231, 235, 0.7)",
+  },
+  breakdownTotalLabel: {
+    fontSize: 14,
+    fontFamily: FONTS.bodyBold,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  breakdownTotalValue: {
+    fontSize: 18,
+    fontFamily: FONTS.displayBlack,
+    fontWeight: "900",
+    color: PRIMARY_COLOR,
+  },
 
   // Commission banner — web parity: amber bg/border
   banner: {
