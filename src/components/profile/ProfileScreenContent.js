@@ -69,6 +69,7 @@ import analyticsService from "../../services/analyticsService";
 import socialService from "../../services/socialService";
 import engagementService from "../../services/engagementService";
 import authService from "../../services/authService";
+import { onCacheEvent } from "../../services/cacheEvents";
 import venueService from "../../services/venueService";
 import useCachedResource from "../../hooks/useCachedResource";
 import { CACHE_TTL } from "../../services/queryCache";
@@ -328,6 +329,16 @@ function ScoreRing({ score = 0, size = 82, strokeWidth = 4, arcRotation = 0, tex
 
 /* ── Module-level cache ── */
 const _pc = { card: null, stats: null, engagement: null, career: null, ready: false };
+
+// Drop the cached profile snapshot on logout so the next user's profile
+// doesn't flash with the previous owner's name / avatar / stats.
+onCacheEvent("auth:logout", () => {
+  _pc.card = null;
+  _pc.stats = null;
+  _pc.engagement = null;
+  _pc.career = null;
+  _pc.ready = false;
+});
 
 export default function ProfileScreenContent() {
   const router = useRouter();

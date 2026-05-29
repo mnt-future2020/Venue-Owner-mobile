@@ -24,11 +24,21 @@ import { mediaUrl } from "../../utils/media";
 import toast from "../../utils/toast";
 import { FONTS, PRIMARY_COLOR } from "../../constants/theme";
 import { safePush } from "../../services/navigationGuard";
+import { onCacheEvent } from "../../services/cacheEvents";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const GRID_GAP = 8;
 const GRID_CELL = (SCREEN_WIDTH - 32 - GRID_GAP) / 2;
 const _bk = { posts: [], nextCursor: null, hasMore: true, ready: false };
+
+// Clear cached bookmarks on logout so the next user doesn't briefly see
+// the previous account's saved posts.
+onCacheEvent("auth:logout", () => {
+  _bk.posts = [];
+  _bk.nextCursor = null;
+  _bk.hasMore = true;
+  _bk.ready = false;
+});
 
 function timeAgo(dateStr) {
   if (!dateStr) return "";

@@ -17,6 +17,7 @@ import {
   AlertCircle,
   CreditCard,
   History,
+  RotateCcw,
 } from "lucide-react-native";
 import { PRIMARY_COLOR, FONTS } from "../../constants/theme";
 import bookingService from "../../services/bookingService";
@@ -530,6 +531,64 @@ export default function BookingDetailSheet({
                     removed for parity (VenueOwnerDashboard.js:2411-2455). */}
               </View>
 
+              {/* Refund Breakdown (cancelled bookings) — mirrors
+                  VenueOwnerDashboard.js:2457-2521. Shown only when status is
+                  cancelled AND refund_pct > 0. */}
+              {booking.status === "cancelled" &&
+              Number(booking.refund_pct) > 0 ? (
+                <View style={[styles.card, styles.refundCard]}>
+                  <View style={styles.cardHeader}>
+                    <RotateCcw size={15} color="#EF4444" />
+                    <Text style={[styles.cardHeaderTitle, { color: "#EF4444" }]}>
+                      Refund Breakdown
+                    </Text>
+                  </View>
+                  <View style={styles.gridRow}>
+                    <View style={styles.gridCell}>
+                      <Text style={styles.gridLabel}>REFUND TIER</Text>
+                      <Text style={[styles.gridValue, { color: "#EF4444" }]}>
+                        {booking.refund_pct}%
+                      </Text>
+                    </View>
+                    <View style={styles.gridCell}>
+                      <Text style={styles.gridLabel}>REFUND STATUS</Text>
+                      <Text style={styles.gridValue}>
+                        {titleCase(booking.refund_status) || "N/A"}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.gridRow}>
+                    <View style={styles.gridCell}>
+                      <Text style={styles.gridLabel}>PLAYER REFUND</Text>
+                      <Text style={styles.gridValue}>
+                        {fmtMoney(booking.refund_amount)}
+                      </Text>
+                    </View>
+                    <View style={styles.gridCell}>
+                      <Text style={styles.gridLabel}>YOUR DEDUCTION</Text>
+                      <Text style={[styles.gridValue, { color: "#EF4444" }]}>
+                        -
+                        {fmtMoney(
+                          (Number(booking.refund_amount) || 0) -
+                            Math.round(
+                              ((Number(booking.commission_amount) || 0) *
+                                (Number(booking.refund_pct) || 0)) /
+                                100
+                            )
+                        )}
+                      </Text>
+                    </View>
+                  </View>
+                  {booking.cancelled_at ? (
+                    <View style={styles.refundFooter}>
+                      <Text style={styles.refundFooterText}>
+                        Cancelled at {fmtDateTimeDDMM(booking.cancelled_at)}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+
               {/* Actions — mirrors frontend exactly:
                   - Collect Remaining (walk-in + remaining > 0) opens the
                     "Collect Remaining Payment?" confirm; cash hardcoded.
@@ -654,7 +713,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: "90%",
+    maxHeight: "95%",
   },
   handleWrap: {
     alignItems: "center",
@@ -897,6 +956,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
+  },
+
+  // refund breakdown card (cancelled bookings)
+  refundCard: {
+    backgroundColor: "rgba(239, 68, 68, 0.05)",
+    borderColor: "rgba(239, 68, 68, 0.2)",
+  },
+  refundFooter: {
+    marginTop: 4,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(239, 68, 68, 0.1)",
+  },
+  refundFooterText: {
+    fontSize: 11,
+    fontFamily: FONTS.bodyMedium,
+    color: "#9CA3AF",
   },
 
   // timeline rows

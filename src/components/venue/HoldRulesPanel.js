@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { forwardRef, useImperativeHandle, useMemo, useState } from "react";
 import useCachedResource from "../../hooks/useCachedResource";
 import { CACHE_TTL } from "../../services/queryCache";
 import {
@@ -43,7 +43,7 @@ function fmt12h(hhmm) {
   return `${h12}:${pad2(m)} ${period}`;
 }
 
-export default function HoldRulesPanel({ venue }) {
+function HoldRulesPanelInner({ venue }, ref) {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -90,6 +90,9 @@ export default function HoldRulesPanel({ venue }) {
 
   // Force-revalidate after mutations (create / update / toggle / delete)
   const load = refreshRules;
+
+  // Expose refresh to parent (HoldsTab) so pull-to-refresh can trigger it.
+  useImperativeHandle(ref, () => ({ refresh: refreshRules }), [refreshRules]);
 
   const openCreate = () => {
     setEditing(null);
@@ -305,6 +308,9 @@ export default function HoldRulesPanel({ venue }) {
     </View>
   );
 }
+
+const HoldRulesPanel = forwardRef(HoldRulesPanelInner);
+export default HoldRulesPanel;
 
 const styles = StyleSheet.create({
   wrapper: { gap: 12 },

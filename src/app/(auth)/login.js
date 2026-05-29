@@ -99,19 +99,18 @@ export default function LoginScreen() {
 
   return (
     <AuthScreen>
-      {/* Logo */}
-      <View style={styles.logoWrap}>
-        <Logo size={36} />
-      </View>
+      {/* Bordered card wrapper — mobile parity (mobile login.js wraps
+          the entire header + form in a white rounded card with a 1px
+          gray border, padding 20). */}
+      <View style={styles.card}>
+        <View style={styles.header}>
+          <Logo size={50} variant="platform" />
+          <Text style={styles.title}>Venue Owner Login</Text>
+          <Text style={styles.subtitle}>Sign in to manage your facility</Text>
+        </View>
 
-      {/* Title */}
-      <View style={styles.titleWrap}>
-        <Text style={styles.title}>Venue Owner Login</Text>
-        <Text style={styles.subtitle}>Sign in to manage your facility</Text>
-      </View>
-
-      {/* Form */}
-      <View style={styles.form}>
+        {/* Form */}
+        <View style={styles.form}>
         <AuthInput
           label="Email or Mobile Number"
           value={identifier}
@@ -147,55 +146,58 @@ export default function LoginScreen() {
           linkText="Create Account"
           onPress={() => safePush(router, "/(auth)/register")}
         /> */}
-      </View>
-
-      {/* Dev quick-login (dev mode only) */}
-      {__DEV__ && (
-        <View style={styles.devWrap}>
-          <Text style={styles.devLabel}>Quick Login (Dev)</Text>
-          <TouchableOpacity
-            onPress={handleDevLogin}
-            disabled={devLoading}
-            style={[styles.devBtn, devLoading && styles.devBtnDisabled]}
-            activeOpacity={0.85}
-          >
-            {devLoading ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Building2 size={16} color="#FFFFFF" />
-            )}
-            <Text style={styles.devBtnText}>Venue Owner</Text>
-          </TouchableOpacity>
         </View>
-      )}
+
+        {/* Dev quick-login (dev mode only) */}
+        {__DEV__ && (
+          <View style={styles.devWrap}>
+            <Text style={styles.devLabel}>Quick Login (Dev)</Text>
+            <TouchableOpacity
+              onPress={handleDevLogin}
+              disabled={devLoading}
+              style={[styles.devBtn, devLoading && styles.devBtnDisabled]}
+              activeOpacity={0.85}
+            >
+              {devLoading ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Building2 size={16} color="#FFFFFF" />
+              )}
+              <Text style={styles.devBtnText}>Venue Owner</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
     </AuthScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  logoWrap: {
+  // Mobile parity: white card with rounded corners and a 1px gray border
+  // wraps the entire login screen content (see mobile/src/app/(auth)/login.js).
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  header: {
     alignItems: "center",
     marginBottom: 24,
   },
-  logo: {
-    width: 60,
-    height: 60,
-  },
-  titleWrap: {
-    alignItems: "center",
-    marginBottom: 28,
-  },
   title: {
     fontSize: 22,
-    fontWeight: "900",
+    fontWeight: "700",
     color: "#111827",
-    textTransform: "uppercase",
-    letterSpacing: -0.5,
+    marginTop: 8,
+    textAlign: "center",
   },
   subtitle: {
     marginTop: 6,
     fontSize: 13,
     color: "#6B7280",
+    textAlign: "center",
   },
   form: {
     width: "100%",
