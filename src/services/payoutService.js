@@ -66,6 +66,19 @@ const payoutService = {
     const res = await api.get("/payouts/my-payouts", { params });
     return res.data || { settlements: [], page: 1, pages: 1, total: 0 };
   },
+
+  // Venue-owner per-booking transaction history with settlement status.
+  // Endpoint added on develop 2026-05-26 (commit afe041e). Replaces the old
+  // settlement-period payouts list as the source of truth for the Payouts
+  // tab in Finance. Frontend parity: VenueFinancePage.js payoutAPI.myTransactions.
+  // Returns: { transactions: [{ id, host_name, date, sport, start_time,
+  //   end_time, total_amount, venue_share, cf_total_fees, refund_amount,
+  //   settlement_status: "settled"|"on_hold"|"released"|"cancelled",
+  //   venue_name, created_at }], summary: {...} }
+  getMyTransactions: async () => {
+    const res = await api.get("/payouts/my-transactions");
+    return res.data || { transactions: [], summary: {} };
+  },
 };
 
 export default payoutService;
