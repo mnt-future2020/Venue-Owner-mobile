@@ -47,6 +47,8 @@ import { safePush } from "../../services/navigationGuard";
 import { useAuth } from "../../context/AuthContext";
 import InviteLinkModal from "./InviteLinkModal";
 import JoinRequestsModal from "./JoinRequestsModal";
+import GroupInfoSkeleton from "../skeletons/GroupInfoSkeleton";
+import ChatMediaGridSkeleton from "../skeletons/ChatMediaGridSkeleton";
 
 const ROLE_PRESETS = [
   "Captain",
@@ -322,9 +324,7 @@ export default function GroupInfoPanel({ groupId }) {
           <Text style={styles.headerTitle}>Group Info</Text>
           <View style={{ width: 40 }} />
         </View>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={PRIMARY_COLOR} />
-        </View>
+        <GroupInfoSkeleton />
       </View>
     );
   }
@@ -755,9 +755,7 @@ export default function GroupInfoPanel({ groupId }) {
               </TouchableOpacity>
             </View>
             {mediaLoading ? (
-              <View style={styles.mediaEmpty}>
-                <ActivityIndicator size="large" color={PRIMARY_COLOR} />
-              </View>
+              <ChatMediaGridSkeleton />
             ) : mediaItems.length === 0 ? (
               <View style={styles.mediaEmpty}>
                 <ImageIcon size={32} color="#CBD5E1" />

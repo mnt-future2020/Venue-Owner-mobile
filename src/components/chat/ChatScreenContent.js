@@ -61,6 +61,7 @@ import ChatSkeleton from "../skeletons/ChatSkeleton";
 import { FlashList } from "@shopify/flash-list";
 import { StatusBar } from "expo-status-bar";
 import Reanimated, { useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
+import GroupDiscoverySkeleton from "../skeletons/GroupDiscoverySkeleton";
 
 function timeAgo(dateStr) {
   if (!dateStr) return "";
@@ -1553,7 +1554,7 @@ export default function ChatScreenContent() {
             />
           </View>
           {discoverLoading ? (
-            <View style={styles.centered}><ActivityIndicator size="large" color={PRIMARY_COLOR} /></View>
+            <GroupDiscoverySkeleton />
           ) : (
             <FlashList
               data={filteredDiscoverGroups}

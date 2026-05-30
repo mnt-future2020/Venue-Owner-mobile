@@ -27,6 +27,7 @@ import { useWishlist } from "../../context/WishlistContext";
 import LogoutModal from "../ui/LogoutModal";
 import ActionSheetModal from "../ui/ActionSheetModal";
 import ImageCropModal from "./ImageCropModal";
+import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 
 export default function EditProfileSheet({ visible, onClose, card, onSaved }) {
   const insets = useSafeAreaInsets();
@@ -394,14 +395,24 @@ export default function EditProfileSheet({ visible, onClose, card, onSaved }) {
     <Modal
       visible={visible}
       animationType="slide"
-      // `presentationStyle="pageSheet"` is iOS-only — on Android the Modal
-      // always goes fullscreen. Combined with `statusBarTranslucent` it
-      // pushed our header behind the status bar, so we drop both: the OS
-      // now reserves the status-bar strip and the header's `paddingTop:
-      // insets.top` lands the title cleanly below it.
-      // (Global `<StatusBar style="dark" />` is mounted once in src/app/_layout.js — no need to re-declare here.)
+      // `statusBarTranslucent` is REQUIRED on Android — without it the Modal
+      // opens its own native window and Android draws the status bar from
+      // that window's theme (typically light icons on a dark/translucent
+      // strip). React's `<StatusBar />` API only configures the activity
+      // window, so any color set from JS never reaches the modal window.
+      // With translucent={true}, the modal window stops drawing its own
+      // status bar background and the activity's white/dark configuration
+      // (mounted at src/app/_layout.js) shows through. The header below
+      // pads `StatusBar.currentHeight + 8` so it clears the status bar.
+      statusBarTranslucent
       onRequestClose={onClose}
     >
+      {/* Android Modal opens in a new window so the root-level StatusBar
+          declaration in src/app/_layout.js does NOT propagate here — re-
+          declare the dark icons / white background inside the modal so the
+          status bar matches the Edit Profile header instead of falling back
+          to the OS default (often light icons on a translucent strip). */}
+      <ExpoStatusBar style="dark" backgroundColor="#FFFFFF" translucent={false} />
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === "ios" ? "padding" : "height"}

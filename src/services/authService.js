@@ -3,6 +3,7 @@ import api from "../lib/axios";
 const authService = {
   login: (identifier, password) =>
     api.post("/auth/login", { identifier, password }).then((r) => r.data),
+  logout: () => api.post("/auth/logout").then((r) => r.data),
   devLogin: (email) => api.post("/auth/dev-login", { email }).then((r) => r.data),
   getMe: () => api.get("/auth/me").then((r) => r.data),
   registerSendOtp: (payload) =>

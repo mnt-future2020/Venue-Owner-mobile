@@ -112,10 +112,10 @@ export default function LoginScreen() {
         {/* Form */}
         <View style={styles.form}>
         <AuthInput
-          label="Email or Mobile Number"
+          label="Email / Phone Number"
           value={identifier}
           onChangeText={setIdentifier}
-          placeholder="you@example.com or 98765 43210"
+          placeholder="Enter your email / phone"
           keyboardType="email-address"
           autoCapitalize="none"
           editable={!loading}
@@ -124,7 +124,7 @@ export default function LoginScreen() {
           label="Password"
           value={password}
           onChangeText={setPassword}
-          placeholder="Enter password"
+          placeholder="Enter your password"
           editable={!loading}
           showPassword={showPass}
           onToggle={() => setShowPass((v) => !v)}

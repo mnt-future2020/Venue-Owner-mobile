@@ -35,6 +35,7 @@ import toast from "../../utils/toast";
 import { PRIMARY_COLOR, FONTS } from "../../constants/theme";
 import FeedCommentsSheet from "../feed/FeedCommentsSheet";
 import ConfirmModal from "../ui/ConfirmModal";
+import PostsGridSkeleton from "../skeletons/PostsGridSkeleton";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const GRID_GAP = 2;
@@ -620,11 +621,7 @@ export default function PostsGrid({ userId, posts: externalPosts, onRefresh }) {
   );
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={PRIMARY_COLOR} />
-      </View>
-    );
+    return <PostsGridSkeleton />;
   }
 
   if (!posts.length) {

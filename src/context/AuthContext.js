@@ -172,6 +172,16 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    // Hit the backend FIRST while the bearer token is still attached so the
+    // server can revoke it (`invalidate_user_tokens` in routes/auth/auth.py:378).
+    // Without this call, the access token stays valid on the server until its
+    // natural expiry — a leaked token would remain usable after the user
+    // believes they have logged out. Frontend does the same
+    // (contexts/AuthContext.js:109). Best-effort: network failure must NOT
+    // block the local sign-out, so swallow errors.
+    try {
+      await authService.logout();
+    } catch {}
     await AsyncStorage.multiRemove([
       STORAGE_KEYS.token,
       STORAGE_KEYS.refreshToken,

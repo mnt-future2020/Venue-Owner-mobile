@@ -20,6 +20,7 @@ import socialService from "../../../services/socialService";
 import toast from "../../../utils/toast";
 import { PRIMARY_COLOR } from "../../../constants/theme";
 import { useAuth } from "../../../context/AuthContext";
+import PostDetailSkeleton from "../../../components/skeletons/PostDetailSkeleton";
 
 const VIEWPORT_HEIGHT = Dimensions.get("window").height;
 
@@ -153,9 +154,7 @@ export default function PostDetailScreen() {
       <Header title="Post" showBack />
 
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={PRIMARY_COLOR} />
-        </View>
+        <PostDetailSkeleton />
       ) : !post ? (
         <FeedEmptyState
           title="Post not found"
