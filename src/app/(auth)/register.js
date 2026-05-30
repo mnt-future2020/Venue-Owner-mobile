@@ -94,24 +94,24 @@ export default function RegisterScreen() {
           label="Full Name"
           value={name}
           onChangeText={setName}
-          placeholder="Your name"
+          placeholder="Enter your full name"
           editable={!loading}
         />
         <PasswordField
           label="Password"
           value={password}
           onChangeText={setPassword}
-          placeholder="Min 8 chars, uppercase, lowercase, number"
+          placeholder="Min 8 characters with uppercase, lowercase & number"
           editable={!loading}
           showPassword={showPass}
           onToggle={() => setShowPass((v) => !v)}
           errorText={passInvalid ? "Must be 8+ chars with uppercase, lowercase, and number" : ""}
         />
         <AuthInput
-          label="Phone (WhatsApp OTP)"
+          label="Phone Number"
           value={phone}
           onChangeText={(v) => setPhone(cleanPhone(v))}
-          placeholder="98765 43210"
+          placeholder="Enter your mobile number"
           keyboardType="number-pad"
           editable={!loading}
           maxLength={10}
@@ -123,7 +123,7 @@ export default function RegisterScreen() {
           label="Business Name"
           value={businessName}
           onChangeText={setBusinessName}
-          placeholder="Your sports facility name"
+          placeholder="Enter your sports facility name"
           editable={!loading}
         />
         <AuthInput

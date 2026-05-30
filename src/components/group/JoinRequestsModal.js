@@ -16,6 +16,7 @@ import { mediaUrl } from "../../utils/media";
 import toast from "../../utils/toast";
 import { PRIMARY_COLOR } from "../../constants/theme";
 import { useWishlist } from "../../context/WishlistContext";
+import JoinRequestsSkeleton from "../skeletons/JoinRequestsSkeleton";
 
 export default function JoinRequestsModal({ visible, onClose, groupId }) {
   const { refreshUnreadCount, notifyChatRead } = useWishlist();
@@ -192,9 +193,7 @@ export default function JoinRequestsModal({ visible, onClose, groupId }) {
 
           {/* List */}
           {loading ? (
-            <View style={styles.centered}>
-              <ActivityIndicator size="large" color={PRIMARY_COLOR} />
-            </View>
+            <JoinRequestsSkeleton rows={4} />
           ) : requests.length === 0 ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIcon}>

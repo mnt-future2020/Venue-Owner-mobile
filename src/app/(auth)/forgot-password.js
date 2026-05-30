@@ -199,7 +199,7 @@ export default function ForgotPasswordScreen() {
             label="Phone Number"
             value={phone}
             onChangeText={(v) => setPhone(cleanPhone(v))}
-            placeholder="98765 43210"
+            placeholder="Enter your mobile number"
             keyboardType="number-pad"
             editable={!loading}
             maxLength={10}
@@ -283,7 +283,7 @@ export default function ForgotPasswordScreen() {
             label="New Password"
             value={newPassword}
             onChangeText={setNewPassword}
-            placeholder="Min 8 chars, uppercase, lowercase, number"
+            placeholder="Min 8 characters with uppercase, lowercase & number"
             editable={!loading}
             showPassword={showPassword}
             onToggle={() => setShowPassword((v) => !v)}

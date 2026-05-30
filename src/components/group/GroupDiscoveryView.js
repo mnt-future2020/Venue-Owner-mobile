@@ -26,6 +26,7 @@ import { mediaUrl } from "../../utils/media";
 import toast from "../../utils/toast";
 import { PRIMARY_COLOR } from "../../constants/theme";
 import { useLocation } from "../../context/LocationContext";
+import GroupDiscoverySkeleton from "../skeletons/GroupDiscoverySkeleton";
 
 const SPORT_EMOJI = {
   football: "\u26bd",
@@ -340,11 +341,7 @@ export default function GroupDiscoveryView({ onOpenGroup, onBack, onCreateGroup 
   );
 
   if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={PRIMARY_COLOR} />
-      </View>
-    );
+    return <GroupDiscoverySkeleton />;
   }
 
   return (

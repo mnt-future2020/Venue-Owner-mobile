@@ -13,6 +13,7 @@ import { Pin, Trash2, X } from "lucide-react-native";
 import chatService from "../../services/chatService";
 import toast from "../../utils/toast";
 import { PRIMARY_COLOR } from "../../constants/theme";
+import ChatMessageListSkeleton from "../skeletons/ChatMessageListSkeleton";
 
 function formatTime(dateStr) {
   if (!dateStr) return "";
@@ -140,9 +141,7 @@ export default function PinnedMessagesModal({
 
         {/* Content */}
         {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={PRIMARY_COLOR} />
-          </View>
+          <ChatMessageListSkeleton rows={5} />
         ) : error ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.errorText}>{error}</Text>

@@ -32,6 +32,7 @@ import { useAuth } from "../../context/AuthContext";
 import complianceService from "../../services/complianceService";
 import toast from "../../utils/toast";
 import { PRIMARY_COLOR } from "../../constants/theme";
+import PrivacySettingsSkeleton from "../skeletons/PrivacySettingsSkeleton";
 
 export default function PrivacySettingsContent() {
   const router = useRouter();
@@ -258,11 +259,7 @@ export default function PrivacySettingsContent() {
   );
 
   if (loading) {
-    return (
-      <View style={styles.loadingWrap}>
-        <ActivityIndicator size="large" color={PRIMARY_COLOR} />
-      </View>
-    );
+    return <PrivacySettingsSkeleton />;
   }
 
   return (

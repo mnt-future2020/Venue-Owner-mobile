@@ -25,6 +25,7 @@ import toast from "../../utils/toast";
 import { FONTS, PRIMARY_COLOR } from "../../constants/theme";
 import { safePush } from "../../services/navigationGuard";
 import { onCacheEvent } from "../../services/cacheEvents";
+import BookmarksSkeleton from "../skeletons/BookmarksSkeleton";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const GRID_GAP = 8;
@@ -313,11 +314,7 @@ export default function BookmarksScreenContent() {
   };
 
   if (loading) {
-    return (
-      <View style={styles.loadingWrap}>
-        <ActivityIndicator size="large" color={PRIMARY_COLOR} />
-      </View>
-    );
+    return <BookmarksSkeleton />;
   }
 
   const activePostId = getPostId(activePost);

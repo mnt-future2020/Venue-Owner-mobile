@@ -64,6 +64,8 @@ import { safePush } from "../../../services/navigationGuard";
 import { API_BASE } from "../../../lib/axios";
 import { KCKeyboardAvoidingView } from "../../../lib/keyboardController";
 import { STORAGE_KEYS } from "../../../constants/storage";
+import ChatThreadSkeleton from "../../../components/skeletons/ChatThreadSkeleton";
+import ChatMediaGridSkeleton from "../../../components/skeletons/ChatMediaGridSkeleton";
 
 const SOCKET_URL = API_BASE.replace(/\/api$/, "");
 
@@ -2159,9 +2161,7 @@ export default function ChatRoomScreen() {
         onLayout={handleChatAreaLayout}
       >
         {loading ? (
-          <View style={styles.centered}>
-            <ActivityIndicator size="large" color={PRIMARY_COLOR} />
-          </View>
+          <ChatThreadSkeleton />
         ) : messages.length === 0 ? (
           <View style={styles.emptyChat}>
             <View style={styles.emptyChatIconWrap}>
@@ -2805,9 +2805,7 @@ export default function ChatRoomScreen() {
               </Pressable>
             </View>
             {mediaLoading ? (
-              <View style={styles.sheetEmpty}>
-                <ActivityIndicator size="large" color={PRIMARY_COLOR} />
-              </View>
+              <ChatMediaGridSkeleton />
             ) : mediaItems.length === 0 ? (
               <View style={styles.sheetEmpty}>
                 <ImageIcon size={32} color="#CBD5E1" />
