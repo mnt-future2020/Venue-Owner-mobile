@@ -150,7 +150,12 @@ export default function PostDetailScreen() {
   }, [postId]);
 
   return (
-    <View style={styles.screen}>
+    // Reserve the OS gesture-nav strip at the bottom. Without this, the
+    // ScrollView extends into Android's home-indicator / back-swipe zone
+    // and the bottom 24-48 px steal touches from the scroller — so vertical
+    // drags that start near the bottom edge get swallowed by the system
+    // gesture instead of scrolling the post.
+    <View style={[styles.screen, { paddingBottom: insets.bottom }]}>
       <Header title="Post" showBack />
 
       {loading ? (
@@ -164,7 +169,9 @@ export default function PostDetailScreen() {
       ) : (
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: Math.max(insets.bottom, 20) + 16 }}
+          // Outer View already reserves `insets.bottom`, so content needs
+          // only its own visual breathing room here.
+          contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 36 }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={PRIMARY_COLOR} colors={[PRIMARY_COLOR]} />
