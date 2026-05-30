@@ -391,7 +391,11 @@ function PostDetailModal({ post, visible, onClose, onDelete, currentUserId }) {
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
-      <View style={styles.modalContainer}>
+      {/* Reserve the Android home-indicator / back-swipe strip at the
+          bottom. Without this the ScrollView extends into the OS gesture
+          zone and drags that start near the bottom edge are swallowed by
+          the system gesture instead of scrolling the post body. */}
+      <View style={[styles.modalContainer, { paddingBottom: insets.bottom }]}>
         {/* Header */}
         <View style={[styles.modalHeader, { paddingTop: Math.max(insets.top, 10) + 6 }]}>
           <View style={styles.modalAuthorRow}>
