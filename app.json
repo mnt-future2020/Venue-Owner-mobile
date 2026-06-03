@@ -7,6 +7,11 @@
     "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
     "scheme": "venue-lobbi",
+    "androidStatusBar": {
+      "barStyle": "dark-content",
+      "backgroundColor": "#FFFFFF",
+      "translucent": false
+    },
     "splash": {
       "image": "./assets/splashscreen.gif",
       "resizeMode": "contain",
@@ -68,6 +73,7 @@
       "expo-router",
       "expo-font",
       "expo-dev-client",
+      "./plugins/withForceDarkDisabled.js",
       [
         "expo-updates",
         {
