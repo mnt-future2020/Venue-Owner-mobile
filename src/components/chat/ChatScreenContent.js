@@ -7,8 +7,10 @@ import {
   Animated,
   AppState,
   Dimensions,
+  KeyboardAvoidingView,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -1605,7 +1607,14 @@ export default function ChatScreenContent() {
 
       {/* Create Group Modal (matches web) */}
       <Modal visible={showCreateGroup} animationType="slide" transparent statusBarTranslucent onRequestClose={() => { setShowCreateGroup(false); setGroupFormError(""); }}>
-        <View style={styles.groupModalOverlay}>
+        {/* KeyboardAvoidingView lifts the entire sheet when keyboard opens
+            so KeyboardAwareScrollView has room to scroll the focused input
+            into view. Without this the groupModalContainer's maxHeight:90%
+            stays fixed and bottom inputs get hidden behind the keyboard. */}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.groupModalOverlay}
+        >
           <View style={styles.groupModalContainer}>
             {/* Drag handle */}
             <View style={styles.groupDragHandle}><View style={styles.groupDragBar} /></View>
@@ -1760,7 +1769,7 @@ export default function ChatScreenContent() {
               </Pressable>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Sport Picker Modal - Using Shared Component */}
