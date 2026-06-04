@@ -1494,6 +1494,11 @@ export default function ChatRoomScreen() {
               try {
                 await delFn(conversationId, msgId, "for_me");
                 setMessages((prev) => prev.filter((m) => (m.id || m._id) !== msgId));
+                // Web parity: deleting your last message for-me makes the
+                // backend recompute that conversation's last_message preview,
+                // so refresh the chat list (web does this via prev_message ->
+                // updateActiveItem). Mirrors the for_everyone branch below.
+                notifyChatRead();
               } catch (err) {
                 toast.error(err?.message || "Failed to delete");
               }

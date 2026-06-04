@@ -487,6 +487,27 @@ function NewChatModal({ visible, onClose, onSelectUser }) {
     }
   }, [visible, userId]);
 
+  // Always open on the Followers tab (Option A). This <Modal> never unmounts —
+  // the parent keeps <NewChatModal/> rendered and only toggles `visible` — so
+  // the active tab, the underline indicator (driven by scrollX), and the
+  // horizontal pager's scroll offset all survive a close and could otherwise
+  // desync on reopen (tab says "Followers" while the pager still shows
+  // "Following"). On each open, reset ALL THREE together: tab state, the
+  // animated indicator, and the pager offset, plus any in-progress search.
+  useEffect(() => {
+    if (!visible) return;
+    setActiveTab("followers");
+    setQuery("");
+    setSearchResults([]);
+    scrollX.setValue(0);
+    // The pager FlatList is already laid out on reopen; snap it back to page 0.
+    // rAF lets layout settle first (harmless no-op on the very first open).
+    const raf = requestAnimationFrame(() => {
+      pagerRef.current?.scrollToOffset?.({ offset: 0, animated: false });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [visible, scrollX]);
+
   const handleSearch = (text) => {
     setQuery(text);
     if (debounceRef.current) clearTimeout(debounceRef.current);

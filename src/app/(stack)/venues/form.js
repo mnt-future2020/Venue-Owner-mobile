@@ -176,25 +176,45 @@ export default function VenueFormScreen() {
     if (errors[key]) setErrors((p) => ({ ...p, [key]: null }));
   };
 
+  // Frontend parity (VenueForm.js, commit 229d1f8). Sport keys come from the
+  // chip selector lowercase ("cricket") while turf_config stores them title-case
+  // ("Cricket"), so the add/remove diff must be case-insensitive — otherwise a
+  // de-selected sport keeps its turf config and a re-selected sport gets a
+  // duplicate config block.
   const handleSportsChange = (newSports) => {
     setForm((prev) => {
       const oldSports = prev.sports || [];
-      const added = newSports.filter((s) => !oldSports.includes(s));
-      const removed = oldSports.filter((s) => !newSports.includes(s));
+      const newLower = newSports.map((s) => s.toLowerCase());
+      const oldLower = oldSports.map((s) => s.toLowerCase());
+      const added = newSports.filter((s) => !oldLower.includes(s.toLowerCase()));
+      const removedLower = oldLower.filter((s) => !newLower.includes(s));
+
       let turfConfig = [...(prev.turf_config || [])];
-      turfConfig = turfConfig.filter((tc) => !removed.includes(tc.sport));
+
+      // Remove turf config for removed sports (case-insensitive)
+      turfConfig = turfConfig.filter(
+        (tc) => !removedLower.includes((tc.sport || "").toLowerCase())
+      );
+
+      // Add default turf config for newly added sports (skip if already exists)
       for (const sport of added) {
-        turfConfig.push({
-          sport,
-          turfs: [
-            {
-              name: `${getSportLabel(sport)} Turf 1`,
-              price: 2000,
-              lobbians: 1,
-            },
-          ],
-        });
+        const exists = turfConfig.some(
+          (tc) => (tc.sport || "").toLowerCase() === sport.toLowerCase()
+        );
+        if (!exists) {
+          turfConfig.push({
+            sport,
+            turfs: [
+              {
+                name: `${getSportLabel(sport)} Turf 1`,
+                price: 2000,
+                lobbians: 1,
+              },
+            ],
+          });
+        }
       }
+
       return { ...prev, sports: newSports, turf_config: turfConfig };
     });
     if (errors.sports) setErrors((p) => ({ ...p, sports: null }));

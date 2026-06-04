@@ -132,7 +132,7 @@ export default function FinanceScreen() {
   } = useCachedResource(
     "finance:payouts",
     async () => {
-      const [psum, linked, txns] = await Promise.all([
+      let [psum, linked, txns] = await Promise.all([
         payoutService.getMySummary().catch(() => null),
         payoutService.getLinkedAccount().catch(() => null),
         // Develop 2026-05-26 (commit afe041e): per-booking transaction
@@ -141,6 +141,28 @@ export default function FinanceScreen() {
         // frontend now reads the same endpoint via payoutAPI.myTransactions.
         payoutService.getMyTransactions().catch(() => null),
       ]);
+      // Web parity (commit 6be87bb): if the bank account isn't verified yet but
+      // a Cashfree vendor id exists, a vendor-activation webhook may have been
+      // missed — reconcile by syncing vendor status on load and refetch the
+      // account if it just turned ACTIVE, so it stops showing "Pending
+      // Verification" without any manual action. Runs on first load and on
+      // pull-to-refresh (same fetcher). Never let a failed sync break the load.
+      try {
+        if (
+          linked &&
+          linked.linked !== false &&
+          !linked.bank_account_verified &&
+          linked.cashfree_vendor_id
+        ) {
+          const sync = await payoutService.syncVendorStatus();
+          if (sync?.vendor_status === "ACTIVE") {
+            const refreshed = await payoutService
+              .getLinkedAccount()
+              .catch(() => null);
+            if (refreshed) linked = refreshed;
+          }
+        }
+      } catch {}
       const transactions = Array.isArray(txns?.transactions)
         ? txns.transactions
         : [];

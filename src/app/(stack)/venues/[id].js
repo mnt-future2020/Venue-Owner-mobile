@@ -54,7 +54,7 @@ import { getSportIconName } from "../../../constants/venueConstants";
 import { PRIMARY_COLOR, FONTS } from "../../../constants/theme";
 import venueService from "../../../services/venueService";
 import bookingService from "../../../services/bookingService";
-import { onCacheEvent } from "../../../services/cacheEvents";
+import { onCacheEvent, emitCacheEvent } from "../../../services/cacheEvents";
 import toast from "../../../utils/toast";
 
 import StatCard from "../../../components/dashboard/StatCard";
@@ -180,6 +180,17 @@ function ModePill({ options, value, onChange, inline = false }) {
     </View>
   );
 }
+
+// Frontend parity (commit 7b3f4cb): a booking cancel must refresh BOTH the
+// bookings list AND the walk-ins list, not just the one the action came from.
+// On web both lists live in one page; here they are separate, independently
+// cached sub-tabs (Bookings / Walk-ins / Slots) that stay mounted once visited,
+// so a walk-in cancelled from the Bookings tab would otherwise leave the Walk-in
+// tab stale. Any booking mutation emits this venue-scoped signal and every
+// sub-tab re-fetches its own list when the venueId matches.
+const BOOKINGS_CHANGED_EVENT = "venue:bookingsChanged";
+const notifyBookingsChanged = (venueId) =>
+  emitCacheEvent(BOOKINGS_CHANGED_EVENT, { venueId });
 
 // ───────────── BOOKINGS sub-tab ─────────────
 // Module-level cache (mobile pattern). Persists across mount/unmount so the
@@ -316,7 +327,20 @@ export function BookingsTab({ venueId }) {
 
   const onSheetChanged = useCallback(() => {
     fetchPage(1, { isRefresh: true });
-  }, [fetchPage]);
+    // Notify sibling tabs (Walk-in / Slots) so they don't show stale data after
+    // a cancel/collect here — frontend parity 7b3f4cb.
+    notifyBookingsChanged(venueId);
+  }, [fetchPage, venueId]);
+
+  // Refresh when a booking is mutated in a sibling tab. The fetchInFlight guard
+  // in fetchPage de-dupes this against our own onSheetChanged refresh.
+  useEffect(
+    () =>
+      onCacheEvent(BOOKINGS_CHANGED_EVENT, (p) => {
+        if (p?.venueId === venueId) fetchPage(1, { isRefresh: true });
+      }),
+    [venueId, fetchPage]
+  );
 
   // Timeline view: group by date
   const grouped = useMemo(() => {
@@ -752,6 +776,16 @@ export function SlotsTab({ venueId }) {
   useEffect(() => {
     loadSlots();
   }, [loadSlots]);
+
+  // Slot availability changes whenever a booking is cancelled/created in any
+  // tab — force-refetch the current date (frontend parity 7b3f4cb).
+  useEffect(
+    () =>
+      onCacheEvent(BOOKINGS_CHANGED_EVENT, (p) => {
+        if (p?.venueId === venueId) loadSlots({ force: true });
+      }),
+    [venueId, loadSlots]
+  );
 
   // Turfs and time slots
   const turfs = useMemo(() => {
@@ -1431,7 +1465,7 @@ export function SlotsTab({ venueId }) {
         visible={!!bookingDetail}
         booking={bookingDetail}
         onClose={() => setBookingDetail(null)}
-        onChanged={loadSlots}
+        onChanged={() => notifyBookingsChanged(venueId)}
       />
 
       {/* Walk-in Booking modal — mirrors frontend Walk-in Booking dialog
@@ -1442,7 +1476,7 @@ export function SlotsTab({ venueId }) {
         slot={walkInSlot}
         venueId={venueId}
         onClose={() => setWalkInSlot(null)}
-        onBooked={loadSlots}
+        onBooked={() => notifyBookingsChanged(venueId)}
       />
 
       {/* Calendar date picker — mirrors frontend <input type="date">
@@ -1827,6 +1861,17 @@ export function WalkinTab({ venueId, venue }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, venueId, dateFilter]);
 
+  // A walk-in cancelled from the Bookings tab (or any sibling) must refresh this
+  // list too — frontend parity 7b3f4cb. fetchInFlight de-dupes the originating
+  // tab's own refresh.
+  useEffect(
+    () =>
+      onCacheEvent(BOOKINGS_CHANGED_EVENT, (p) => {
+        if (p?.venueId === venueId) fetchPage(1, { isRefresh: true });
+      }),
+    [venueId, fetchPage]
+  );
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchPage(1, { isRefresh: true });
@@ -1997,7 +2042,10 @@ export function WalkinTab({ venueId, venue }) {
         visible={!!selectedBooking}
         booking={selectedBooking}
         onClose={() => setSelectedBooking(null)}
-        onChanged={() => fetchPage(1, { isRefresh: true })}
+        onChanged={() => {
+          fetchPage(1, { isRefresh: true });
+          notifyBookingsChanged(venueId);
+        }}
       />
     </>
   );
@@ -2134,6 +2182,10 @@ export function CheckinTab({ venueId, venueName }) {
         "Checked in",
         scanned.customer_name || scanned.host_name || "Welcome!"
       );
+      // Refresh sibling tabs so the Bookings list shows the checked-in state
+      // and the Slots grid updates — web parity 7b3f4cb (onCheckinSuccess
+      // reloads bookings + slots on a single page).
+      notifyBookingsChanged(venueId);
       setTimeout(reset, 800);
     } catch (err) {
       toast.error(
@@ -2144,7 +2196,7 @@ export function CheckinTab({ venueId, venueName }) {
     } finally {
       setConfirming(false);
     }
-  }, [scanned, scannedQr, confirming, reset]);
+  }, [scanned, scannedQr, confirming, reset, venueId]);
 
   const handleMarkPresent = useCallback(async (bookingId) => {
     if (!bookingId) return;
@@ -2154,8 +2206,9 @@ export function CheckinTab({ venueId, venueName }) {
       // returns 400 for online bookings (those need QR verification).
       await bookingService.manualCheckin(bookingId);
       toast.success("Marked as present");
-      // Refresh
+      // Refresh this tab + notify siblings (Bookings/Slots) — web parity 7b3f4cb.
       await loadTodayBookings();
+      notifyBookingsChanged(venueId);
     } catch (err) {
       toast.error(
         "Failed",
@@ -2164,7 +2217,7 @@ export function CheckinTab({ venueId, venueName }) {
     } finally {
       setMarkingId(null);
     }
-  }, [loadTodayBookings]);
+  }, [loadTodayBookings, venueId]);
 
   const handlePickQrImage = useCallback(async () => {
     try {
