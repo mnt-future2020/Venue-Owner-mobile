@@ -57,12 +57,18 @@ export default function SportPicker({ visible, onClose, selectedSport, onSelectS
       visible={visible}
       animationType="slide"
       transparent
-      statusBarTranslucent
+      // statusBarTranslucent intentionally OFF — when this picker is opened
+      // from inside another modal (e.g. Create Group), stacking two
+      // statusBarTranslucent modals on Android makes the back-gesture /
+      // edge-swipe route to the wrong modal and the sheet visibly glitches.
+      // The outer modal owns the status bar; this one just slides up.
       onRequestClose={onClose}
     >
+      {/* Stop touches inside the sheet from bubbling to the dim overlay's
+          press handler (which would close the modal mid-tap on Android). */}
       <View style={styles.overlay}>
         <Pressable style={{ flex: 1 }} onPress={onClose} />
-        <View style={styles.sheet}>
+        <View style={styles.sheet} onStartShouldSetResponder={() => true}>
           <View style={styles.header}>
             <Text style={styles.title}>Select Sport</Text>
             <Pressable onPress={onClose}>

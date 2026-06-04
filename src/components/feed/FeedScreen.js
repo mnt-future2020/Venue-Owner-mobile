@@ -302,6 +302,12 @@ export default function FeedScreen() {
   );
 
   useEffect(() => {
+    // Reset scroll to top FIRST so the new tab's data renders from offset 0
+    // — without this, the FlashList keeps the previous tab's scroll offset
+    // and the swapped data appears in the wrong vertical position (For You
+    // auto-scrolled, Following items showing at For You's saved offset, etc).
+    scrollRef.current?.scrollToOffset?.({ offset: 0, animated: false });
+
     // Restore cached data for this tab instantly (no loader)
     const cached = _cache[activeTab];
     if (cached && cached.posts.length > 0) {
@@ -859,6 +865,14 @@ export default function FeedScreen() {
           <FeedLoadingState topOffset={sharedHeaderHeight} />
         ) : (
           <FlashList
+            // Force a fresh FlashList instance per tab. Without this, posts
+            // that exist in BOTH tabs (an authored post can appear in For
+            // You via the algorithm AND in Following because you follow that
+            // user) cause FlashList's keyExtractor reconciliation to scroll
+            // to the same item's new position when the data prop swaps —
+            // making the new tab "auto-scroll" to where the previous tab's
+            // visible item now lives. Remounting kills that reconciliation.
+            key={activeTab}
             ref={scrollRef}
             data={feedData}
             keyExtractor={keyExtractor}
