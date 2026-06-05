@@ -7,6 +7,7 @@ import {
   Image as RNImage,
   Linking,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -388,16 +389,50 @@ function PostDetailModal({ post, visible, onClose, onDelete, currentUserId }) {
 
   if (!safePost) return null;
 
+  // `transparent={true}` makes the Modal share the host activity's window
+  // instead of spawning its own (greyly-themed) one, so the bar config from
+  // app.json carries through. The inner white view fills the area behind
+  // the translucent status bar.
+  //
+  // Production-APK fix: useSafeAreaInsets() can return insets.top = 0
+  // inside a transparent Modal when the release build's RCTSafeAreaView
+  // bridge initialises late. Fall back to StatusBar.currentHeight (a
+  // synchronously-available native constant on Android) so the white fill
+  // is never zero-height. iOS reads insets.top reliably.
+  const statusBarFillHeight = Math.max(
+    insets.top || 0,
+    Platform.OS === "android" ? (StatusBar.currentHeight || 0) : 0
+  );
+
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+    <Modal
+      visible={visible}
+      // animationType="fade" instead of "slide" — slide caused a visible
+      // status-bar "disappear / reappear" glitch on Android: setting
+      // statusBarTranslucent={true} on mount made the activity bar
+      // immediately transparent, but the white fill <View> at the top of
+      // the modal was still sliding up from off-screen for ~200ms, leaving
+      // the bar area visually exposed (showing whatever was behind it)
+      // until the slide finished. Fade keeps the modal at its final
+      // position from frame 1, so the white fill covers the bar area
+      // immediately with no race-condition gap.
+      animationType="fade"
+      onRequestClose={onClose}
+      transparent
+      statusBarTranslucent
+    >
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       {/* Reserve the Android home-indicator / back-swipe strip at the
           bottom. Without this the ScrollView extends into the OS gesture
           zone and drags that start near the bottom edge are swallowed by
           the system gesture instead of scrolling the post body. */}
       <View style={[styles.modalContainer, { paddingBottom: insets.bottom }]}>
+        {/* White fill behind the status bar — guarantees the bar area is
+            white even during the fade-in when the activity layer might
+            otherwise show through. */}
+        <View style={{ height: statusBarFillHeight, backgroundColor: "#FFFFFF" }} />
         {/* Header */}
-        <View style={[styles.modalHeader, { paddingTop: Math.max(insets.top, 10) + 6 }]}>
+        <View style={[styles.modalHeader, { paddingTop: 10 }]}>
           <View style={styles.modalAuthorRow}>
             {authorAvatar ? (
               <Image source={{ uri: mediaUrl(authorAvatar) }} style={styles.modalAvatar} contentFit="cover" />

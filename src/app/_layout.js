@@ -1,6 +1,7 @@
 import "../../global.css";
 import { useEffect } from "react";
-import { Stack } from "expo-router";
+import { Platform, StatusBar as RNStatusBar } from "react-native";
+import { Stack, usePathname } from "expo-router";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
@@ -20,6 +21,22 @@ import { KeyboardProvider } from "../lib/keyboardController";
 
 // Guard against keep-awake / native-module failures during dev (e.g. Expo Go)
 SplashScreen.preventAutoHideAsync().catch(() => {});
+
+// Global StatusBar enforcer — re-applies white bg + dark icons on every
+// navigation so screen-level <StatusBar> overrides can't permanently win.
+// This is the "!important" guarantee: any screen that flips style is reset
+// the moment navigation moves.
+function StatusBarEnforcer() {
+  const pathname = usePathname();
+  useEffect(() => {
+    RNStatusBar.setBarStyle("dark-content", true);
+    if (Platform.OS === "android") {
+      RNStatusBar.setBackgroundColor("#FFFFFF", true);
+      RNStatusBar.setTranslucent(false);
+    }
+  }, [pathname]);
+  return null;
+}
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -86,6 +103,7 @@ export default function RootLayout() {
                   <WishlistProvider>
                   <NotificationBadgeProvider>
                   <StatusBar style="dark" backgroundColor="#FFFFFF" translucent={false} />
+                  <StatusBarEnforcer />
                   <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
                     <Stack.Screen name="index" options={{ headerShown: false }} />
                     <Stack.Screen name="(auth)" options={{ headerShown: false }} />
