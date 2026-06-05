@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "1028683348946",
+    "project_id": "lobbi-player",
+    "storage_bucket": "lobbi-player.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1028683348946:android:5230457b23039d3861a60b",
+        "android_client_info": {
+          "package_name": "com.lobbi.player"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDv0Ej9_NAKWFDrcAniwTJqs8TYCbVqxZ8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1028683348946:android:ebb3d99dc348700d61a60b",
+        "android_client_info": {
+          "package_name": "com.lobbi.venue"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDv0Ej9_NAKWFDrcAniwTJqs8TYCbVqxZ8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

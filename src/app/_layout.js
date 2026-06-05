@@ -6,7 +6,9 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { useFonts } from "expo-font";
+import messaging from "@react-native-firebase/messaging";
 import { AuthProvider } from "../context/AuthContext";
+import { onTokenRefresh } from "../services/pushService";
 import { TabRefreshProvider } from "../context/TabRefreshContext";
 import { LocationProvider } from "../context/LocationContext";
 import { NotificationBadgeProvider } from "../context/NotificationBadgeContext";
@@ -36,6 +38,33 @@ export default function RootLayout() {
       SplashScreen.hideAsync().catch(() => {});
     }
   }, [fontsLoaded]);
+
+  // Firebase push notification handlers
+  useEffect(() => {
+    // Notification tap — app in background
+    const unsubOpen = messaging().onNotificationOpenedApp(() => {
+      // Navigate to dashboard on tap
+    });
+
+    // Notification tap — app killed
+    messaging().getInitialNotification().then((remoteMessage) => {
+      // App opened from killed state — dashboard loads by default
+    });
+
+    // Foreground messages — in-app bell handles it
+    const unsubMessage = messaging().onMessage(async (remoteMessage) => {
+      console.log("FCM foreground:", remoteMessage.notification?.title);
+    });
+
+    // Token refresh
+    const unsubToken = onTokenRefresh();
+
+    return () => {
+      unsubOpen();
+      unsubMessage();
+      unsubToken();
+    };
+  }, []);
 
   if (!fontsLoaded) return null;
 

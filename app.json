@@ -34,6 +34,7 @@
       }
     },
     "android": {
+      "googleServicesFile": "./google-services.json",
       "softwareKeyboardLayoutMode": "resize",
       "config": {
         "googleMaps": {
@@ -121,7 +122,9 @@
           "microphonePermission": "Lobbi Venue needs microphone for voice messages"
         }
       ],
-      "expo-video"
+      "expo-video",
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging"
     ],
     "extra": {
       "eas": {

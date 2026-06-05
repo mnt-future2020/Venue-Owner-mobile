@@ -6,6 +6,7 @@ import authService from "../services/authService";
 import queryCache from "../services/queryCache";
 import cacheService from "../services/cacheService";
 import { emitCacheEvent } from "../services/cacheEvents";
+import { registerForPushNotifications } from "../services/pushService";
 import { STORAGE_KEYS } from "../constants/storage";
 import { API_BASE } from "../lib/axios";
 
@@ -158,6 +159,8 @@ export const AuthProvider = ({ children }) => {
     setToken(data.token);
     setUser(data.user);
     scheduleRefresh(data.token);
+    // Register Firebase push token (fire-and-forget)
+    registerForPushNotifications().catch(() => {});
   };
 
   const login = async (identifier, password) => {
