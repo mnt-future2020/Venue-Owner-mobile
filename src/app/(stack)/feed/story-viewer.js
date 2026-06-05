@@ -12,7 +12,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
-import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 import { getStoryGradientColors, STORY_GRADIENTS } from "../../../constants/theme";
 import { useAuth } from "../../../context/AuthContext";
@@ -304,7 +303,9 @@ export default function StoryViewerScreen() {
   /* ── Render ── */
   return (
     <View style={styles.screen}>
-      <StatusBar style="light" />
+      {/* Status bar config moved to Stack.Screen options in (stack)/_layout.js
+          so native-stack drives the bar in lockstep with the screen fade
+          and there's no abrupt light→dark flash when stories finish. */}
       <KCKeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
       <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
         {/* Progress bars */}

@@ -20,7 +20,19 @@ export default function StackLayout() {
       <Stack.Screen name="feed/[postId]" options={{ headerShown: false }} />
       <Stack.Screen name="feed/create-post" options={{ headerShown: false }} />
       <Stack.Screen name="feed/create-story" options={{ headerShown: false }} />
-      <Stack.Screen name="feed/story-viewer" options={{ headerShown: false }} />
+      {/* No statusBar* options — native-stack on Android applies the value
+          inconsistently and the change can persist after unmount, causing
+          the bar to flip to white icons after the user returns to Feed.
+          Instead we rely on:
+            1. app.json's androidStatusBar baseline (dark icons / #FFFFFF bg)
+            2. The root-level StatusBarEnforcer (app/_layout.js) that calls
+               RNStatusBar.setBarStyle("dark-content") on every pathname
+               change, so any rogue change is corrected on the next nav.
+          The story viewer screen shows a thin white status bar strip on
+          top of its dark content — visually consistent with the rest of
+          the app, and there's no transition flash because the bar config
+          never actually changes. */}
+      <Stack.Screen name="feed/story-viewer" options={{ headerShown: false, animation: "fade" }} />
       <Stack.Screen name="search" options={{ headerShown: false }} />
 
       {/* chat — ported 1:1 from mobile player app */}
