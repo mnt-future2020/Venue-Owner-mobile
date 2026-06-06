@@ -272,6 +272,11 @@ const chatService = {
     return res.data || {};
   },
 
+  getGroupTyping: async (id) => {
+    const res = await api.get(`/groups/${id}/typing`);
+    return res.data || {};
+  },
+
   markGroupRead: async (id) => {
     const res = await api.post(`/groups/${id}/read`);
     return res.data || {};
@@ -405,6 +410,10 @@ const chatService = {
   },
   toggleGroupMute: async (id) => {
     const res = await api.post(`/groups/${id}/mute`);
+    return res.data || {};
+  },
+  getGroupMute: async (id) => {
+    const res = await api.get(`/groups/${id}/mute`);
     return res.data || {};
   },
   clearGroupChat: async (id) => {

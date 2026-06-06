@@ -1013,18 +1013,8 @@ export default function ChatScreenContent() {
   }, [conversations, groups, deferredSearch]);
 
   const filteredUnified = useMemo(() => {
-    let list = unified;
-    // Keep the base pager data stable and only remove empty DM rows.
-    list = list.filter((c) => {
-      if (c._type === "group") return true;
-      // Only show DM if there's actual message content or unread messages
-      const lm = c.last_message;
-      const hasMessage = typeof lm === "string"
-        ? lm.trim().length > 0
-        : (lm && typeof lm === "object" && (lm.content || lm.text || lm.media_url));
-      return hasMessage || (c.unread_count && c.unread_count > 0);
-    });
-    return list;
+    // Show all conversations — including DMs with no messages yet (matches web behaviour)
+    return unified;
   }, [unified]);
 
   const mainTabWidth = tabsHeaderWidth > 0 ? tabsHeaderWidth / MAIN_CHAT_TABS.length : 0;

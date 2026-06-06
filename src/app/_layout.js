@@ -1,7 +1,7 @@
 import "../../global.css";
 import { useEffect } from "react";
 import { Platform, StatusBar as RNStatusBar } from "react-native";
-import { Stack, usePathname } from "expo-router";
+import { Stack, usePathname, useRouter } from "expo-router";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
@@ -57,15 +57,25 @@ export default function RootLayout() {
   }, [fontsLoaded]);
 
   // Firebase push notification handlers
+  const router = useRouter();
+  const navigateByScreen = (screen) => {
+    switch (screen) {
+      case "venue/bookings": router.push("/(tabs)/venues"); break;
+      case "profile": router.push("/(tabs)/profile"); break;
+      case "feed": router.push("/(tabs)/feed"); break;
+      default: router.push("/(tabs)/dashboard"); break;
+    }
+  };
+
   useEffect(() => {
-    // Notification tap — app in background
-    const unsubOpen = messaging().onNotificationOpenedApp(() => {
-      // Navigate to dashboard on tap
+    const unsubOpen = messaging().onNotificationOpenedApp((remoteMessage) => {
+      navigateByScreen(remoteMessage.data?.screen);
     });
 
-    // Notification tap — app killed
     messaging().getInitialNotification().then((remoteMessage) => {
-      // App opened from killed state — dashboard loads by default
+      if (remoteMessage) {
+        navigateByScreen(remoteMessage.data?.screen);
+      }
     });
 
     // Foreground messages — in-app bell handles it
