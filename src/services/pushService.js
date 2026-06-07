@@ -1,5 +1,5 @@
 import messaging from "@react-native-firebase/messaging";
-import { Platform } from "react-native";
+import { Platform, PermissionsAndroid } from "react-native";
 import api from "../lib/axios";
 
 /**
@@ -8,6 +8,18 @@ import api from "../lib/axios";
  */
 export async function registerForPushNotifications() {
   try {
+    // Android 13+ (API 33) requires explicit POST_NOTIFICATIONS permission
+    if (Platform.OS === "android" && Platform.Version >= 33) {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+      );
+      if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+        console.log("Android notification permission denied");
+        return null;
+      }
+    }
+
+    // iOS permission prompt
     const authStatus = await messaging().requestPermission();
     const enabled =
       authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
