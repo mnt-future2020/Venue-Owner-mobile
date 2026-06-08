@@ -1,8 +1,8 @@
-import { useContext, useMemo, useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useCallback, useContext, useMemo, useRef, useState } from "react";
+import { KeyboardAvoidingView, Platform, Pressable, StatusBar as RNStatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { StatusBar } from "expo-status-bar";
+import { StatusBar, setStatusBarBackgroundColor, setStatusBarStyle, setStatusBarTranslucent } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { PRIMARY_COLOR, STORY_GRADIENTS } from "../../../constants/theme";
@@ -28,6 +28,26 @@ export default function CreateStoryScreen() {
 
   const canSubmit = useMemo(() => content.trim().length > 0 && !submitting, [content, submitting]);
 
+  // Force-apply a dark status bar (light icons) every time this screen gains
+  // focus. The root StatusBarEnforcer fires on pathname change and re-sets
+  // dark-content / white-bg, which races with our <StatusBar> JSX and wins
+  // (parent effects fire after children's). useFocusEffect runs AFTER the
+  // navigation transition, so it lands last and wins the race.
+  useFocusEffect(
+    useCallback(() => {
+      setStatusBarStyle("light", true);
+      if (Platform.OS === "android") {
+        setStatusBarBackgroundColor("#03120D", true);
+        setStatusBarTranslucent(false);
+        // Belt-and-suspenders: RN's imperative API also bypasses the
+        // expo-status-bar stack in case the enforcer fires again later.
+        RNStatusBar.setBarStyle("light-content", true);
+        RNStatusBar.setBackgroundColor("#03120D", true);
+        RNStatusBar.setTranslucent(false);
+      }
+    }, [])
+  );
+
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
@@ -51,7 +71,13 @@ export default function CreateStoryScreen() {
       style={[styles.screen, { paddingTop: insets.top + 12, paddingBottom: Math.max(insets.bottom, 16) }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <StatusBar style="light" />
+      {/* Dark screen → paint the Android status-bar background to match.
+          The app's global status bar is white/non-translucent (root _layout +
+          app.json androidStatusBar). Setting only style="light" here flipped the
+          ICONS to white but left the BACKGROUND white, leaving a white strip with
+          invisible icons at the top of this dark composer. Match the screen bg;
+          expo-status-bar pops back to the white default on back-navigation. */}
+      <StatusBar style="light" backgroundColor="#03120D" translucent={false} />
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => router.back()} style={styles.topIconBtn} activeOpacity={0.85}>
           <Ionicons name="close" size={24} color="#FFFFFF" />

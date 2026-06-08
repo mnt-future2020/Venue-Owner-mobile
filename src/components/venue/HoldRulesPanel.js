@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   Switch,
 } from "react-native";
 import { Plus, Edit, Trash2, Lock, Clock } from "lucide-react-native";
@@ -15,6 +14,7 @@ import { PRIMARY_COLOR } from "../../constants/theme";
 import venueService from "../../services/venueService";
 import toast from "../../utils/toast";
 import HoldRuleForm from "./HoldRuleForm";
+import ConfirmModal from "../ui/ConfirmModal";
 
 const DAYS = [
   { key: 0, label: "Sun" },
@@ -47,6 +47,8 @@ function HoldRulesPanelInner({ venue }, ref) {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Cached per-venue hold rules. Initial visit shows spinner + fetch; revisit
   // renders the rule list instantly from cache, then silently revalidates.
@@ -155,29 +157,25 @@ function HoldRulesPanelInner({ venue }, ref) {
   };
 
   const confirmDelete = (rule) => {
-    Alert.alert(
-      "Delete Hold Rule?",
-      `This will permanently delete "${rule.name}". This action cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await venueService.deleteHoldRule(rule.id);
-              toast.success("Deleted", "Hold rule removed.");
-              load();
-            } catch (e) {
-              toast.error(
-                "Delete failed",
-                e?.response?.data?.detail || "Try again"
-              );
-            }
-          },
-        },
-      ]
-    );
+    setPendingDelete(rule);
+  };
+
+  const handleDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await venueService.deleteHoldRule(pendingDelete.id);
+      toast.success("Deleted", "Hold rule removed.");
+      setPendingDelete(null);
+      load();
+    } catch (e) {
+      toast.error(
+        "Delete failed",
+        e?.response?.data?.detail || "Try again"
+      );
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const formatScheduleSummary = (r) => {
@@ -304,6 +302,22 @@ function HoldRulesPanelInner({ venue }, ref) {
         saving={saving}
         turfOptions={turfOptions}
         title={editing?.id ? "Edit Hold Rule" : "New Hold Rule"}
+      />
+
+      <ConfirmModal
+        visible={!!pendingDelete}
+        onClose={() => !deleting && setPendingDelete(null)}
+        onConfirm={handleDelete}
+        icon={Trash2}
+        title="Delete Hold Rule?"
+        message={
+          pendingDelete
+            ? `This will permanently delete "${pendingDelete.name}". This action cannot be undone.`
+            : ""
+        }
+        confirmText="Delete"
+        cancelText="Cancel"
+        loading={deleting}
       />
     </View>
   );
