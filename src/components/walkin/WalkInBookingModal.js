@@ -7,11 +7,9 @@ import {
   StyleSheet,
   Modal,
   Pressable,
-  ScrollView,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { X, Minus, Plus } from "lucide-react-native";
 import { PRIMARY_COLOR, FONTS } from "../../constants/theme";
@@ -199,39 +197,38 @@ export default function WalkInBookingModal({
         style={styles.overlay}
         onPress={() => !submitting && onClose?.()}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={styles.kbWrap}
-          pointerEvents="box-none"
+        <Pressable
+          style={styles.card}
+          onPress={(e) => e.stopPropagation()}
         >
-          <Pressable
-            style={styles.card}
-            onPress={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <View style={styles.header}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.title}>Walk-in Booking</Text>
-                <Text style={styles.subtitle}>
-                  Book a slot for a walk-in customer
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => !submitting && onClose?.()}
-                hitSlop={8}
-                style={styles.closeBtn}
-                disabled={submitting}
-              >
-                <X size={18} color="#0F172A" />
-              </TouchableOpacity>
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.title}>Walk-in Booking</Text>
+              <Text style={styles.subtitle}>
+                Book a slot for a walk-in customer
+              </Text>
             </View>
-
-            <ScrollView
-              style={{ flexGrow: 0 }}
-              contentContainerStyle={styles.scrollBody}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
+            <TouchableOpacity
+              onPress={() => !submitting && onClose?.()}
+              hitSlop={8}
+              style={styles.closeBtn}
+              disabled={submitting}
             >
+              <X size={18} color="#0F172A" />
+            </TouchableOpacity>
+          </View>
+
+          <KeyboardAwareScrollView
+            enableOnAndroid
+            extraScrollHeight={160}
+            extraHeight={200}
+            enableResetScrollToCoords={false}
+            keyboardOpeningTime={0}
+            contentContainerStyle={styles.scrollBody}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
               {/* Turf / Sport / Date / Time grid */}
               <View style={styles.infoGrid}>
                 <InfoCell label="Turf" value={slot.turf_name} />
@@ -463,41 +460,40 @@ export default function WalkInBookingModal({
                   />
                 </View>
               </View>
-            </ScrollView>
+          </KeyboardAwareScrollView>
 
-            {/* Sticky bottom button — safe-area aware */}
-            <View
+          {/* Sticky bottom button — safe-area aware */}
+          <View
+            style={[
+              styles.footer,
+              { paddingBottom: Math.max(insets.bottom, 12) },
+            ]}
+          >
+            <TouchableOpacity
               style={[
-                styles.footer,
-                { paddingBottom: Math.max(insets.bottom, 12) },
+                styles.submitBtn,
+                paymentType === "advance" && styles.submitBtnAdvance,
+                !canSubmit && styles.submitBtnDisabled,
               ]}
+              disabled={!canSubmit}
+              onPress={handleSubmit}
+              activeOpacity={0.9}
             >
-              <TouchableOpacity
-                style={[
-                  styles.submitBtn,
-                  paymentType === "advance" && styles.submitBtnAdvance,
-                  !canSubmit && styles.submitBtnDisabled,
-                ]}
-                disabled={!canSubmit}
-                onPress={handleSubmit}
-                activeOpacity={0.9}
-              >
-                {submitting ? (
-                  <View style={styles.submitInner}>
-                    <ActivityIndicator color="#FFFFFF" />
-                    <Text style={styles.submitText}>Booking…</Text>
-                  </View>
-                ) : (
-                  <Text style={styles.submitText}>
-                    {paymentType === "advance" && advanceAmount !== "" && advanceNum > 0
-                      ? `Book Now (Advance: ₹${advanceNum.toLocaleString("en-IN")})`
-                      : "Book Now (Full Payment)"}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </KeyboardAvoidingView>
+              {submitting ? (
+                <View style={styles.submitInner}>
+                  <ActivityIndicator color="#FFFFFF" />
+                  <Text style={styles.submitText}>Booking…</Text>
+                </View>
+              ) : (
+                <Text style={styles.submitText}>
+                  {paymentType === "advance" && advanceAmount !== "" && advanceNum > 0
+                    ? `Book Now (Advance: ₹${advanceNum.toLocaleString("en-IN")})`
+                    : "Book Now (Full Payment)"}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </Pressable>
       </Pressable>
     </Modal>
   );
@@ -534,7 +530,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(15, 23, 42, 0.55)",
     justifyContent: "flex-end",
   },
-  kbWrap: { flex: 1, justifyContent: "flex-end" },
   card: {
     backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 24,
@@ -573,7 +568,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(241, 245, 249, 0.8)",
   },
 
-  scrollBody: { padding: 20, gap: 16 },
+  scrollBody: { padding: 20, paddingBottom: 80, gap: 16 },
   field: { gap: 6 },
   fieldLabel: {
     fontSize: 10,

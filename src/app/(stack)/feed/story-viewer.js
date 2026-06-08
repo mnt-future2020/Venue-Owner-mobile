@@ -291,16 +291,13 @@ export default function StoryViewerScreen() {
     }
   };
 
-  /* ── Loading state ── */
-  if (loading || !currentStory) {
-    return (
-      <SafeAreaView style={styles.loadingWrap} edges={["top", "bottom"]}>
-        <Text style={styles.loadingText}>Loading story...</Text>
-      </SafeAreaView>
-    );
-  }
-
   /* ── Render ── */
+  // Keep outer shell (View > KCKeyboardAvoidingView > SafeAreaView) mounted
+  // even during loading so insets/keyboard layout doesn't settle visibly when
+  // content appears — prevents the bottom-section flicker when exiting back
+  // to the feed screen.
+  const ready = !loading && !!currentStory;
+
   return (
     <View style={styles.screen}>
       {/* Status bar config moved to Stack.Screen options in (stack)/_layout.js
@@ -308,6 +305,12 @@ export default function StoryViewerScreen() {
           and there's no abrupt light→dark flash when stories finish. */}
       <KCKeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
       <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+        {!ready ? (
+          <View style={styles.loadingInner}>
+            <Text style={styles.loadingText}>Loading story...</Text>
+          </View>
+        ) : (
+          <>
         {/* Progress bars */}
         <View style={styles.progressRow}>
           {segments.map((story, i) => (
@@ -405,10 +408,12 @@ export default function StoryViewerScreen() {
             </Text>
           </View>
         ) : null}
+          </>
+        )}
       </SafeAreaView>
 
       {/* Reply bar — below story card, sticks above keyboard */}
-      {!isOwnStory ? (
+      {ready && !isOwnStory ? (
         <View style={[styles.replyOuter, { paddingBottom: keyboardVisible ? 4 : insets.bottom + 8 }]}>
           <View style={styles.replyBar}>
             <TextInput
@@ -466,11 +471,10 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 14,
   },
-  loadingWrap: {
+  loadingInner: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#03120D",
   },
   loadingText: {
     fontSize: 15,
